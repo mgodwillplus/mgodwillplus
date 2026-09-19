@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <meta
+    name="theme-color"
+    content="#05070d"
+  >
+
+  <meta
+    name="description"
+    content="Watch and listen on MGodwill+."
+  >
+
+  <title>MGodwill+ Player</title>
+
+  <link
+    rel="stylesheet"
+    href="style.css"
+  >
+</head>
+
+<body data-page="player">
+
+  <!-- CINEMATIC LOADER -->
+  <div
+    id="page-loader"
+    class="page-loader"
+  >
+    <div class="loader-brand">
+      <span class="loader-plus">M</span>
+      <span>GODWILL+</span>
+    </div>
+
+    <div class="loader-line">
+      <span></span>
+    </div>
+  </div>
+
+
+  <!-- HEADER -->
+  <div id="site-header"></div>
+
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- PLAYER -->
+    <section class="player-page">
+
+      <div
+        id="player-container"
+        class="player-container"
+      >
+
+        <!--
+          JavaScript inserts the media player here.
+        -->
+
+      </div>
+
+
+      <!-- INFORMATION -->
+      <div
+        id="player-info"
+        class="player-info"
+      >
+
+        <!--
+          JavaScript inserts title,
+          description and metadata here.
+        -->
+
+      </div>
+
+
+      <!-- ACTIONS -->
+      <div class="player-actions">
+
+        <a
+          class="btn btn-secondary"
+          href="javascript:history.back()"
+        >
+          ← Back
+        </a>
+
+        <a
+          class="btn btn-secondary"
+          href="watch.html"
+        >
+          Browse Videos
+        </a>
+
+      </div>
+
+    </section>
+
+
+    <!-- MORE LIKE THIS -->
+    <section class="content-section">
+
+      <div class="section-heading">
+
+        <div>
+
+          <span class="eyebrow">
+            KEEP EXPLORING
+          </span>
+
+          <h2>
+            More from MGodwill+
+          </h2>
+
+        </div>
+
+      </div>
+
+
+      <div
+        id="player-related"
+        class="media-grid"
+      ></div>
+
+    </section>
+
+
+    <!-- EMPTY / ERROR STATE -->
+    <section
+      id="player-error"
+      class="content-section hidden"
+    >
+
+      <div class="empty-state">
+
+        <span class="eyebrow">
+          NOTHING TO PLAY
+        </span>
+
+        <h2>
+          This work could not be found.
+        </h2>
+
+        <p>
+          The requested catalogue item may not
+          exist or may have an invalid link.
+        </p>
+
+        <a
+          class="btn btn-primary"
+          href="watch.html"
+        >
+          Return to Watch
+        </a>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <!-- FOOTER -->
+  <div id="site-footer"></div>
+
+
+  <!-- SCRIPTS -->
+  <script src="catalogue.js"></script>
+  <script src="app.js"></script>
+
+</body>
+</html>
