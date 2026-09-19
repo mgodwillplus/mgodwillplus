@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <meta
+    name="theme-color"
+    content="#05070d"
+  >
+
+  <meta
+    name="description"
+    content="Search the MGodwill+ media catalogue."
+  >
+
+  <title>Search — MGodwill+</title>
+
+  <link
+    rel="stylesheet"
+    href="style.css"
+  >
+</head>
+
+<body data-page="search">
+
+  <!-- CINEMATIC LOADER -->
+  <div
+    id="page-loader"
+    class="page-loader"
+  >
+    <div class="loader-brand">
+      <span class="loader-plus">M</span>
+      <span>GODWILL+</span>
+    </div>
+
+    <div class="loader-line">
+      <span></span>
+    </div>
+  </div>
+
+
+  <!-- HEADER -->
+  <div id="site-header"></div>
+
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- SEARCH HERO -->
+    <section class="page-hero search-hero">
+
+      <div class="page-hero-content">
+
+        <span class="eyebrow">
+          MGODWILL+ DISCOVERY
+        </span>
+
+        <h1>
+          Search
+        </h1>
+
+        <p>
+          Find films, music, podcasts and
+          everything else in the archive.
+        </p>
+
+      </div>
+
+    </section>
+
+
+    <!-- SEARCH BOX -->
+    <section class="content-section">
+
+      <div class="search-interface">
+
+        <form
+          id="search-form"
+          class="search-form"
+        >
+
+          <label
+            for="search-input"
+            class="sr-only"
+          >
+            Search MGodwill+
+          </label>
+
+          <input
+            id="search-input"
+            class="search-input"
+            type="search"
+            name="q"
+            placeholder="Search the MGodwill+ universe..."
+            autocomplete="off"
+            spellcheck="false"
+          >
+
+          <button
+            class="btn btn-primary search-button"
+            type="submit"
+          >
+            Search
+          </button>
+
+        </form>
+
+      </div>
+
+    </section>
+
+
+    <!-- RESULTS -->
+    <section
+      class="content-section"
+      id="search-results-section"
+    >
+
+      <div class="section-heading">
+
+        <div>
+
+          <span class="eyebrow">
+            RESULTS
+          </span>
+
+          <h2 id="search-heading">
+            Explore the archive
+          </h2>
+
+        </div>
+
+        <span
+          id="search-count"
+          class="section-count"
+        ></span>
+
+      </div>
+
+
+      <div
+        id="search-results"
+        class="media-grid"
+      ></div>
+
+    </section>
+
+
+    <!-- SEARCH HELP -->
+    <section class="content-section">
+
+      <div class="cta-panel">
+
+        <span class="eyebrow">
+          DISCOVER
+        </span>
+
+        <h2>
+          Search by title, category or description.
+        </h2>
+
+        <p>
+          Try something such as
+          <strong>War</strong>,
+          <strong>Aurora</strong>,
+          <strong>Mavuno</strong>,
+          <strong>music</strong>
+          or
+          <strong>podcast</strong>.
+        </p>
+
+        <div class="cta-actions">
+
+          <a
+            class="btn btn-secondary"
+            href="index.html"
+          >
+            Back Home
+          </a>
+
+          <a
+            class="btn btn-secondary"
+            href="watch.html"
+          >
+            Browse Videos
+          </a>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <!-- FOOTER -->
+  <div id="site-footer"></div>
+
+
+  <!-- SCRIPTS -->
+  <script src="catalogue.js"></script>
+  <script src="app.js"></script>
+
+</body>
+</html>
