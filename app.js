@@ -33,11 +33,41 @@
   var of = function (k) { return items.filter(function (i) { return i.kind === k; }); };
 
   /* ---- templates ---- */
+  function playable(i) { return i.kind !== 'journal' && /\/file\/d\//.test(i.url || ''); }
+  function pd(i, n) { return playable(i) ? ' data-n="' + i.n + '" data-s="' + n + '"' : ''; }
+  function embedUrl(u) {
+    if (has(window.getDrivePreviewUrl)) return getDrivePreviewUrl(u);
+    var m = String(u).match(/\/file\/d\/([^/]+)/);
+    return m ? 'https://drive.google.com/file/d/' + m[1] + '/preview' : u;
+  }
+  /* In-page player: Drive embed inside a modal; the original link stays as a fallback */
+  function play(i, s) {
+    var inf = $('#info'); if (inf && inf.open) inf.close();
+    var d = $('#player');
+    if (!d) {
+      d = document.createElement('dialog'); d.id = 'player'; d.setAttribute('aria-labelledby', 'ptitle');
+      document.body.appendChild(d);
+      d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
+      d.addEventListener('close', function () { d.innerHTML = ''; }); /* removing the iframe stops playback */
+    }
+    if (!d.showModal) { window.open(i.links[s].url, '_blank', 'noopener'); return; }
+    function show(n) {
+      var u = i.links[n].url;
+      d.innerHTML = '<div class="pbar"><h2 id="ptitle">' + esc(i.title) + '</h2><button class="btn" type="button" id="pclose" aria-label="Close player">&times;</button></div>' +
+        '<div class="pv' + (i.kind === 'watch' ? '' : ' au') + '"><iframe src="' + esc(embedUrl(u)) + '" title="' + esc(i.title) + '" allow="autoplay; fullscreen" allowfullscreen></iframe></div>' +
+        '<div class="pfoot">' + (i.links.length > 1 ? '<div class="chips" role="group" aria-label="Choose source">' + i.links.map(function (l, k) { return '<button class="chip" type="button" data-s="' + k + '" aria-pressed="' + (k === n) + '">Source ' + (k + 1) + '</button>'; }).join('') + '</div>' : '') +
+        (i.desc ? '<p>' + esc(i.desc) + '</p>' : '') + '<a class="plink" href="' + esc(u) + '" target="_blank" rel="noopener">Not loading? Open in Google Drive</a></div>';
+      $('#pclose', d).onclick = function () { d.close(); };
+      d.querySelectorAll('.chip').forEach(function (b) { b.onclick = function () { show(+b.getAttribute('data-s')); }; });
+    }
+    show(s);
+    if (!d.open) d.showModal();
+  }
   function card(i) {
     var inner = '<div class="th" data-i="' + esc(i.title.charAt(0)) + '">' + (i.thumb ? '<img src="' + esc(i.thumb) + '" alt="' + esc(i.title) + '" loading="lazy" decoding="async" referrerpolicy="no-referrer">' : '') +
       '<span class="badge">' + LBL[i.kind] + '</span></div><div class="ct"><h3>' + esc(i.title) + '</h3><p>' + esc(i.cats[0] || LBL[i.kind]) + '</p></div>';
-    return '<article class="card">' + (i.url ? '<a class="cl" href="' + esc(i.url) + '" target="_blank" rel="noopener">' + inner + '</a>' : '<div class="cl">' + inner + '</div>') +
-      (i.links.length > 1 ? '<button class="srcs" type="button" data-n="' + i.n + '">All ' + i.links.length + ' sources</button>' : '') + '</article>';
+    return '<article class="card">' + (i.url ? '<a class="cl" href="' + esc(i.url) + '" target="_blank" rel="noopener"' + pd(i, 0) + '>' + inner + '</a>' : '<div class="cl">' + inner + '</div>') +
+      '</article>';
   }
   function rail(title, list, more) {
     if (!list.length) return '';
@@ -53,7 +83,7 @@
   function hero(i) {
     return '<section class="hero' + (i.thumb ? '' : ' no') + '">' + (i.thumb ? '<img src="' + esc(i.thumb) + '" alt="" fetchpriority="high" referrerpolicy="no-referrer">' : '') +
       '<div class="hin"><span class="badge">' + LBL[i.kind] + '</span><h1>' + esc(i.title) + '</h1>' + (i.desc ? '<p>' + esc(i.desc) + '</p>' : '') +
-      '<div class="btns">' + (i.url ? '<a class="btn pri" href="' + esc(i.url) + '" target="_blank" rel="noopener">&#9654; ' + verb[i.kind] + '</a>' : '') +
+      '<div class="btns">' + (i.url ? '<a class="btn pri" href="' + esc(i.url) + '" target="_blank" rel="noopener"' + pd(i, 0) + '>&#9654; ' + verb[i.kind] + '</a>' : '') +
       '<button class="btn" type="button" id="more">More Info</button></div></div></section>';
   }
   function info(i) {
@@ -61,7 +91,7 @@
     if (!d) { d = document.createElement('dialog'); d.id = 'info'; document.body.appendChild(d); d.addEventListener('click', function (e) { if (e.target === d) d.close(); }); }
     d.innerHTML = '<div class="th" data-i="' + esc(i.title.charAt(0)) + '">' + (i.thumb ? '<img src="' + esc(i.thumb) + '" alt="">' : '') + '</div><div class="dn"><span class="badge" style="position:static;display:inline-block">' + LBL[i.kind] + '</span><h2>' + esc(i.title) + '</h2>' +
       (i.cats.length ? '<p>' + esc(i.cats.join(', ')) + '</p>' : '') + (i.desc ? '<p>' + esc(i.desc) + '</p>' : '') +
-      '<div class="btns">' + i.links.map(function (l, n) { return '<a class="btn' + (n ? '' : ' pri') + '" href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(i.links.length > 1 ? 'Source ' + (n + 1) : verb[i.kind]) + '</a>'; }).join('') +
+      '<div class="btns">' + i.links.map(function (l, n) { return '<a class="btn' + (n ? '' : ' pri') + '" href="' + esc(l.url) + '" target="_blank" rel="noopener"' + pd(i, n) + '>' + esc(i.links.length > 1 ? 'Source ' + (n + 1) : verb[i.kind]) + '</a>'; }).join('') +
       '<button class="btn" type="button" id="close">Close</button></div></div>';
     $('#close', d).onclick = function () { d.close(); };
     if (d.showModal) d.showModal();
@@ -94,7 +124,13 @@
     '<small>&copy; <span id="yr"></span> MGodwill+. Created by MGodwill.</small></footer>');
   $('#yr').textContent = new Date().getFullYear();
   var app = $('#app');
-  document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('.srcs'); if (b) info(items[+b.getAttribute('data-n')]); });
+  document.addEventListener('click', function (e) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; /* let "open in new tab" gestures work */
+    var a = e.target.closest && e.target.closest('a[data-n]');
+    if (!a) return;
+    e.preventDefault();
+    play(items[+a.getAttribute('data-n')], +a.getAttribute('data-s') || 0);
+  });
   document.addEventListener('error', function (e) { var p = e.target.tagName === 'IMG' && e.target.parentElement; if (p) p.classList.add('no'); }, true);
 
   /* ---- pages ---- */
