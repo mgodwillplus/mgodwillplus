@@ -1,4 +1,4 @@
-/* MGodwill+ app.js (v3) — reads catalogue.js (never modifies it). Videos/audio play on play.html via Drive's embedded player. */
+/* MGodwill+ app.js (v4) — reads catalogue.js (never modifies it). Videos/audio play on play.html via Drive's embedded player. */
 (function () {
   'use strict';
   var LBL = { watch: 'Video', music: 'Music', podcasts: 'Podcast', journal: 'Journal' };
@@ -48,6 +48,29 @@
       '<span class="badge">' + LBL[i.kind] + '</span></div><div class="ct"><h3>' + esc(i.title) + '</h3><p>' + esc(i.cats[0] || LBL[i.kind]) + '</p></div>';
     return '<article class="card"' + clip + '>' + (i.url ? '<a class="cl" href="' + esc(href(i, 0)) + '"' + tgt(i) + '>' + inner + '</a>' : '<div class="cl">' + inner + '</div>') + '</article>';
   }
+  /* audio = compact rows (thumbnail, title, description); journal = plain title lines */
+  function row(i) {
+    var inner = '<div class="rth" data-i="' + esc(i.title.charAt(0)) + '">' + (i.thumb ? '<img src="' + esc(i.thumb) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">' : '') + '<span class="pt"></span></div>' +
+      '<div class="rt"><h3>' + esc(i.title) + '</h3><p>' + esc(i.desc || i.cats[0] || LBL[i.kind]) + '</p></div>';
+    return '<article class="row">' + (i.url ? '<a class="rl" href="' + esc(href(i, 0)) + '"' + tgt(i) + '>' + inner + '</a>' : '<div class="rl">' + inner + '</div>') + '</article>';
+  }
+  function jline(i) { return i.url ? '<a class="jr" href="' + esc(i.url) + '" target="_blank" rel="noopener">' + esc(i.title) + '</a>' : '<div class="jr">' + esc(i.title) + '</div>'; }
+  function lay(list, k) {
+    if (!list.length) return '<p class="empty">Nothing here yet.</p>';
+    return k === 'watch' ? '<div class="grid">' + list.map(card).join('') + '</div>' : k === 'journal' ? '<div class="jl">' + list.map(jline).join('') + '</div>' : '<div class="rows">' + list.map(row).join('') + '</div>';
+  }
+  function sect(title, list, k, url, max) {
+    if (!list.length) return '';
+    return '<section class="sec"><div class="sh"><h2>' + esc(title) + '</h2>' + (list.length > max ? '<a href="' + url + '">See all</a>' : '') + '</div>' + lay(list.slice(0, max), k) + '</section>';
+  }
+  function mixed(list) {
+    var o = '';
+    [['watch', 'Videos'], ['music', 'Music'], ['podcasts', 'Podcasts & Audio'], ['journal', 'Journal']].forEach(function (g) {
+      var l = list.filter(function (i) { return i.kind === g[0]; });
+      if (l.length) o += '<section class="sec"><div class="sh"><h2>' + g[1] + '</h2></div>' + lay(l, g[0]) + '</section>';
+    });
+    return o;
+  }
   function rail(title, list, more) {
     if (!list.length) return '';
     return '<section class="sec"><div class="sh"><h2>' + esc(title) + '</h2>' + (more || '') + '</div><div class="rail">' + list.map(card).join('') + '</div></section>';
@@ -62,7 +85,7 @@
   function hero(i) {
     return '<section class="hero' + (i.thumb ? '' : ' no') + '">' + (i.thumb ? '<img src="' + esc(i.thumb) + '" alt="" fetchpriority="high" referrerpolicy="no-referrer">' : '') +
       (i.kind === 'watch' && playable(i) ? '<video class="hclip" muted loop playsinline preload="metadata" aria-hidden="true"></video>' : '') + '<div class="hin"><span class="badge">' + LBL[i.kind] + '</span><h1>' + esc(i.title) + '</h1>' + (i.desc ? '<p>' + esc(i.desc) + '</p>' : '') +
-      '<div class="btns">' + (i.url ? '<a class="btn pri" href="' + esc(href(i, 0)) + '"' + tgt(i) + '>&#9654; ' + verb[i.kind] + '</a>' : '') +
+      '<div class="btns">' + (i.url ? '<a class="btn pri" href="' + esc(href(i, 0)) + '"' + tgt(i) + '>&#9654;&#xFE0E; ' + verb[i.kind] + '</a>' : '') +
       '<button class="btn" type="button" id="more">More Info</button></div></div></section>';
   }
   function info(i) {
@@ -81,13 +104,13 @@
     return '<div class="chips" role="group" aria-label="Filter by category">' + ['All'].concat(cats).map(function (c, n) { return '<button class="chip" type="button" aria-pressed="' + (n === 0) + '">' + esc(c) + '</button>'; }).join('') + '</div>';
   }
   function listPage(title, lead, list, extra, withChips) {
-    app.innerHTML = '<div class="pg"><h1>' + title + '</h1>' + (lead ? '<p class="lead">' + lead + '</p>' : '') + (extra || '') + (withChips ? chips(list) : '') + '<div id="out">' + grid(list) + '</div></div>';
+    app.innerHTML = '<div class="pg' + (PAGE === 'watch' ? '' : ' nar') + '"><h1>' + title + '</h1>' + (lead ? '<p class="lead">' + lead + '</p>' : '') + (extra || '') + (withChips ? chips(list) : '') + '<div id="out">' + lay(list, PAGE) + '</div></div>';
     var cs = app.querySelectorAll('.chip');
     cs.forEach(function (b) {
       b.onclick = function () {
         cs.forEach(function (x) { x.setAttribute('aria-pressed', x === b); });
         var c = b.textContent;
-        $('#out').innerHTML = grid(c === 'All' ? list : list.filter(function (i) { return i.cats.indexOf(c) > -1; }));
+        $('#out').innerHTML = lay(c === 'All' ? list : list.filter(function (i) { return i.cats.indexOf(c) > -1; }), PAGE);
       };
     });
   }
@@ -137,13 +160,13 @@
     if (!items.length) app.innerHTML = empty;
     else {
       var h = items.filter(function (i) { return i.id === FEATURED_ID; })[0] || of('watch').filter(function (i) { return i.thumb; })[0] || items[0];
-      var rc = recent().map(function (z) { return items.filter(function (i) { return i.slug === z; })[0]; }).filter(Boolean);
-      var out = hero(h) + rail('Recently Viewed', rc) + rail('Films & Shorts', of('watch'), '<a href="watch.html">See all</a>') +
-        rail('Music', of('music'), '<a href="music.html">See all</a>') + rail('Podcasts & Audio', of('podcasts'), '<a href="podcasts.html">See all</a>');
+      var rc = recent().map(function (z) { return items.filter(function (i) { return i.slug === z; })[0]; }).filter(function (z) { return z && z.kind === 'watch'; });
+      var out = hero(h) + rail('Recently Viewed', rc) + rail('Films & Shorts', of('watch'), '<a href="watch.html">See all</a>');
       var seen = []; of('watch').forEach(function (i) { i.cats.forEach(function (c) { if (seen.indexOf(c) < 0) seen.push(c); }); });
       seen.forEach(function (c) { var l = of('watch').filter(function (i) { return i.cats.indexOf(c) > -1; }); if (l.length > 1) out += rail(c, l); });
+      out += sect('Music', of('music'), 'music', 'music.html', 5) + sect('Podcasts & Audio', of('podcasts'), 'podcasts', 'podcasts.html', 5);
       var j = of('journal');
-      out += j.length ? rail('Journal', j, '<a href="journal.html">See all</a>') : '<section class="sec"><div class="sh"><h2>Journal</h2></div>' + blogBtn + '</section>';
+      out += j.length ? sect('Journal', j, 'journal', 'journal.html', 6) : '<section class="sec"><div class="sh"><h2>Journal</h2></div>' + blogBtn + '</section>';
       app.innerHTML = out; heroClip(h);
       var m = $('#more'); if (m) m.onclick = function () { info(h); };
     }
@@ -169,7 +192,7 @@
         '<div class="pinfo"><span class="badge">' + LBL[cur.kind] + '</span><h1>' + esc(cur.title) + '</h1><p class="meta">' + esc(cur.cats.join(', ')) + '</p>' + (cur.desc ? '<p>' + esc(cur.desc) + '</p>' : '') +
         (cur.links.length > 1 ? '<div class="chips" role="group" aria-label="Choose source">' + cur.links.map(function (l, k) { return '<button class="chip" type="button" data-s="' + k + '" aria-pressed="' + (k === s0) + '">Source ' + (k + 1) + '</button>'; }).join('') + '</div>' : '') +
         '<div class="btns"><button class="btn pri" type="button" id="fs">Full screen</button><button class="btn" type="button" id="sh">Share</button><a class="btn" id="od" href="' + esc(cur.links[s0].url) + '" target="_blank" rel="noopener">Open in Google Drive</a></div></div></div>' +
-        (rel.length ? '<aside class="pside"><h2>More like this</h2><div class="pgrid">' + rel.map(card).join('') + '</div></aside>' : '') + '</div>';
+        (rel.length ? '<aside class="pside"><h2>More like this</h2>' + (cur.kind === 'watch' ? '<div class="pgrid">' + rel.map(card).join('') + '</div>' : '<div class="rows">' + rel.map(row).join('') + '</div>') + '</aside>' : '') + '</div>';
       var box = $('#pwrap'), fsb = $('#fs'), inFs = function () { return document.fullscreenElement || document.webkitFullscreenElement; };
       var xset = function (on) { box.classList.toggle('xl', on); document.documentElement.classList.toggle('xlock', on); fsb.textContent = on ? 'Exit full screen' : 'Full screen'; };
       var toggleFs = function () {
@@ -204,7 +227,7 @@
     app.innerHTML = '<div class="pg"><h1>Search</h1><input id="q" class="sin" type="search" placeholder="Search titles, descriptions, categories" aria-label="Search the catalogue" autocomplete="off"><div id="out"></div></div>';
     var q = $('#q'), go = function () {
       var v = q.value.trim().toLowerCase();
-      $('#out').innerHTML = !v ? '<p class="empty">Type to search the catalogue.</p>' : (function (r) { return r.length ? grid(r) : '<p class="empty">No matches for “' + esc(q.value.trim()) + '”.</p>'; })(items.filter(function (i) {
+      $('#out').innerHTML = !v ? '<p class="empty">Type to search the catalogue.</p>' : (function (r) { return r.length ? mixed(r) : '<p class="empty">No matches for “' + esc(q.value.trim()) + '”.</p>'; })(items.filter(function (i) {
         return (i.title + ' ' + i.desc + ' ' + i.cats.join(' ') + ' ' + LBL[i.kind] + ' ' + i.type).toLowerCase().indexOf(v) > -1;
       }));
     };
