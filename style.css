@@ -60,19 +60,13 @@ h1,h2{font-family:var(--disp);font-weight:400;letter-spacing:.03em;line-height:1
 dialog{margin:auto;width:min(92vw,520px);max-height:88svh;overflow:auto;border:1px solid var(--line);border-radius:14px;background:var(--bg2);color:var(--text);padding:0}
 dialog::backdrop{background:rgba(0,0,0,.7)}.dn{padding:16px var(--pad) 20px}.dn h2{font-size:34px;margin:8px 0}.dn p{color:#cfd9e8;margin-bottom:12px}
 .dn .btns{margin-top:8px}.dn .th{border-radius:0}
-/* intro */
+/* intro: black stage, roving spotlight, metallic logo */
 #intro{display:none}
-.intro-on #intro{display:grid;place-items:center;position:fixed;inset:0;z-index:100;overflow:hidden;background:radial-gradient(circle at 50% 45%,#0a1f44,#02050c 70%);animation:ifade .6s 5.2s forwards}
+.intro-on #intro{display:block;position:fixed;inset:0;z-index:100;overflow:hidden;background:#000;animation:ifade .6s 7.6s forwards}
 @keyframes ifade{to{opacity:0;visibility:hidden}}
-.iglow{position:absolute;width:80vmin;height:80vmin;border-radius:50%;background:radial-gradient(circle,rgba(31,182,255,.38),transparent 65%);filter:blur(18px);opacity:0;animation:gl 5.2s ease-in-out forwards}
-@keyframes gl{0%{opacity:0;transform:translateX(-18%) scale(.8)}20%{opacity:.55}60%{opacity:.8;transform:translateX(12%) scale(1)}100%{opacity:.5;transform:translateX(0) scale(1.05)}}
-.istack{position:relative;display:grid;justify-items:center;gap:14px;text-align:center}
-.imono{width:min(26vw,110px);opacity:0;transform:scale(.8);animation:mn 1s .8s cubic-bezier(.2,.8,.2,1) forwards}
-@keyframes mn{to{opacity:1;transform:none}}
-.iword{font:400 clamp(40px,13vw,92px)/1 var(--disp);letter-spacing:.14em;padding-left:.14em;opacity:0;color:transparent;background:linear-gradient(100deg,#fff 42%,#8fe6ff 50%,#fff 58%) 120%/260% 100%;-webkit-background-clip:text;background-clip:text;animation:wd 1.4s 1.8s ease-out forwards,sw 1.8s 2.4s ease-in-out forwards;text-shadow:0 0 0 transparent}
-@keyframes wd{from{opacity:0;letter-spacing:.4em}to{opacity:1;letter-spacing:.14em}}
-@keyframes sw{to{background-position:-30% 0}}
-.iskip{position:absolute;right:16px;bottom:max(16px,env(safe-area-inset-bottom));z-index:1;min-height:40px;padding:0 16px;border:1px solid var(--line);border-radius:99px;background:rgba(5,10,20,.6);color:var(--mute);font:500 14px var(--body);cursor:pointer}
+#ilogo{position:absolute;left:50%;top:50%;width:min(86vw,640px);height:auto;transform:translate(-50%,-50%)}
+#iveil,#iglow{position:absolute;inset:0;pointer-events:none}#iveil{background:#000}
+.iskip{position:absolute;right:16px;bottom:max(16px,env(safe-area-inset-bottom));z-index:2;min-height:40px;padding:0 16px;border:1px solid rgba(255,255,255,.25);border-radius:99px;background:rgba(0,0,0,.5);color:#cfd6e2;font:500 14px var(--body);cursor:pointer}
 @media(prefers-reduced-motion:reduce){#intro{display:none!important}html{scroll-behavior:auto}*{transition:none!important}}
 
 .cl{display:block;color:inherit}
@@ -129,3 +123,8 @@ html.xlock{overflow:hidden}
 .pside .rows{padding:0}
 .jr{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:52px;padding:10px 6px;border-bottom:1px solid var(--line);color:var(--text);font-weight:500}
 a.jr:hover{color:var(--cyan)}.jr::after{content:"\2197";flex:none;color:var(--mute)}
+/* v5: logo in header and footer */
+.brand{display:flex;align-items:center;padding:4px 0}
+.bm{display:block;height:38px;width:auto}.bw{display:none;height:42px;width:auto}
+@media(min-width:760px){.bm{display:none}.hd .bw{display:block}}
+.ft .brand{display:block}.ft .bw{display:block;height:56px;margin-bottom:4px}

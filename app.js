@@ -1,4 +1,4 @@
-/* MGodwill+ app.js (v4) — reads catalogue.js (never modifies it). Videos/audio play on play.html via Drive's embedded player. */
+/* MGodwill+ app.js (v5) — reads catalogue.js (never modifies it). Videos/audio play on play.html via Drive's embedded player. */
 (function () {
   'use strict';
   var LBL = { watch: 'Video', music: 'Music', podcasts: 'Podcast', journal: 'Journal' };
@@ -117,11 +117,11 @@
 
   /* ---- shell ---- */
   document.body.insertAdjacentHTML('afterbegin',
-    '<header class="hd"><a class="brand" href="index.html" aria-label="MGodwill+ home">MGODWILL<b>+</b></a>' +
+    '<header class="hd"><a class="brand" href="index.html" aria-label="MGodwill+ home"><img class="bm" src="assets/logo-symbol.svg" alt=""><img class="bw" src="assets/logo-wordmark.svg" alt=""></a>' +
     '<a class="sbtn" href="search.html" aria-label="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></a>' +
     '<nav class="nav" aria-label="Main">' + NAV.map(function (n) { return '<a href="' + n[0] + '"' + (n[2] === PAGE ? ' aria-current="page"' : '') + '>' + n[1] + '</a>'; }).join('') + '</nav></header>');
   document.body.insertAdjacentHTML('beforeend',
-    '<footer class="ft"><span class="brand">MGODWILL<b>+</b></span><p>A creative universe for film, music, audio, podcasts and writing. Media is hosted by third-party services such as Google Drive; videos and audio play here through their embedded player.</p>' +
+    '<footer class="ft"><span class="brand"><img class="bw" src="assets/logo-wordmark.svg" alt="MGodwill+"></span><p>A creative universe for film, music, audio, podcasts and writing. Media is hosted by third-party services such as Google Drive; videos and audio play here through their embedded player.</p>' +
     '<nav aria-label="Footer">' + NAV.map(function (n) { return '<a href="' + n[0] + '">' + n[1] + '</a>'; }).join('') + '<a href="search.html">Search</a><a href="' + JOURNAL_URL + '" target="_blank" rel="noopener">Blog</a></nav>' +
     '<small>&copy; <span id="yr"></span> MGodwill+. Created by MGodwill.</small></footer>');
   $('#yr').textContent = new Date().getFullYear();
@@ -234,13 +234,40 @@
     q.value = new URLSearchParams(location.search).get('q') || ''; q.oninput = go; go();
   }
 
-  /* ---- intro: once per session, never blocking ---- */
+  /* ---- intro: a black stage, a roving spotlight, a metallic logo. Once per session; Skip always works ---- */
   var intro = $('#intro');
   if (intro) {
     var done = function () { if (intro.parentNode) intro.parentNode.removeChild(intro); document.documentElement.classList.remove('intro-on'); };
     if (document.documentElement.classList.contains('intro-on')) {
       var sk = $('.iskip', intro); if (sk) sk.onclick = done;
-      setTimeout(done, 5900); /* matches the CSS fade ending at 5.8s; also the fallback */
+      try { spotlight(intro, done); } catch (e) { done(); }
+      setTimeout(done, 7600); /* safety net */
     } else done();
+  }
+  function spotlight(root, end) {
+    var veil = $('#iveil', root), glow = $('#iglow', root), gl = $('#gl', root), b = $('#ilogo', root).getBoundingClientRect();
+    var W = root.clientWidth, H = root.clientHeight, cx = b.left + b.width / 2, cy = b.top + b.height / 2, lw = b.width;
+    var io = function (t) { return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+    var out = function (t) { return 1 + 2.4 * Math.pow(t - 1, 3) + 1.4 * Math.pow(t - 1, 2); }; /* overshoot, then settle */
+    var K = [ /* time (s), x, y, radius, easing into this point */
+      [0, .22 * W, .24 * H, .28 * lw, io], [.5, .22 * W, .24 * H, .28 * lw, io], [1.7, .8 * W, .74 * H, .34 * lw, io],
+      [2.5, .2 * W, .7 * H, .34 * lw, io], [3.2, cx + .58 * lw, cy, .55 * lw, io], [3.8, cx - .55 * lw, cy, .6 * lw, io],
+      [4.35, cx, cy, .95 * lw, out], [6, cx, cy, 1.02 * lw, io]];
+    var t0 = performance.now();
+    function frame(now) {
+      var t = (performance.now() - t0) / 1000, i = 0; /* one clock for start and frames */
+      while (i < K.length - 2 && t > K[i + 1][0]) i++;
+      var a = K[i], c = K[i + 1], e = c[4](Math.min(1, Math.max(0, (t - a[0]) / (c[0] - a[0]))));
+      var wob = t < 4.35 ? 1 : Math.max(0, 1 - (t - 4.35) * 1.2); /* hand-held tremor that calms once the light settles */
+      var x = a[1] + (c[1] - a[1]) * e + Math.sin(t * 8.1) * 3 * wob, y = a[2] + (c[2] - a[2]) * e + Math.cos(t * 6.7) * 3 * wob, r = a[3] + (c[3] - a[3]) * e;
+      var k = t < .5 ? 0 : t < 1.3 ? (Math.sin(t * 58) + Math.sin(t * 33) > .5 ? 1 : .12) : (t > 5 && t < 5.09 ? .3 : 1); /* stuttering lamp, one late hiccup */
+      var p = x + 'px ' + y + 'px', k0 = 'rgba(0,0,0,' + (1 - k) + ')';
+      veil.style.background = 'radial-gradient(circle at ' + p + ',' + k0 + ' 0,' + k0 + ' ' + r * .45 + 'px,rgba(0,0,0,' + (1 - k * .85) + ') ' + r * .72 + 'px,rgba(0,0,0,' + (1 - k * .25) + ') ' + r * .9 + 'px,#000 ' + r + 'px)';
+      glow.style.background = 'radial-gradient(circle at ' + p + ',rgba(170,205,255,' + .2 * k + '),rgba(170,205,255,' + .07 * k + ') ' + r * .6 + 'px,transparent ' + r + 'px)';
+      gl.setAttribute('gradientTransform', 'translate(' + (-300 + Math.min(1, Math.max(0, (t - 4.5) / 1.3)) * 1100) + ' 0) rotate(20)'); /* the glint */
+      if (t > 5.9) root.style.opacity = Math.max(0, 1 - (t - 5.9) / .7);
+      if (t < 6.6 && root.parentNode) requestAnimationFrame(frame); else end();
+    }
+    requestAnimationFrame(frame);
   }
 })();
