@@ -64,7 +64,7 @@ dialog::backdrop{background:rgba(0,0,0,.7)}.dn{padding:16px var(--pad) 20px}.dn 
 #intro{display:none}
 .intro-on #intro{display:block;position:fixed;inset:0;z-index:100;overflow:hidden;background:#000;animation:ifade .6s 7.6s forwards}
 @keyframes ifade{to{opacity:0;visibility:hidden}}
-#ilogo{position:absolute;left:50%;top:50%;width:min(86vw,640px);height:auto;transform:translate(-50%,-50%)}
+#ilogo{position:absolute;left:50%;top:50%;height:min(52svh,380px);width:auto;aspect-ratio:560/662;transform:translate(-50%,-50%)}
 #iveil,#iglow{position:absolute;inset:0;pointer-events:none}#iveil{background:#000}
 .iskip{position:absolute;right:16px;bottom:max(16px,env(safe-area-inset-bottom));z-index:2;min-height:40px;padding:0 16px;border:1px solid rgba(255,255,255,.25);border-radius:99px;background:rgba(0,0,0,.5);color:#cfd6e2;font:500 14px var(--body);cursor:pointer}
 @media(prefers-reduced-motion:reduce){#intro{display:none!important}html{scroll-behavior:auto}*{transition:none!important}}
@@ -123,8 +123,9 @@ html.xlock{overflow:hidden}
 .pside .rows{padding:0}
 .jr{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:52px;padding:10px 6px;border-bottom:1px solid var(--line);color:var(--text);font-weight:500}
 a.jr:hover{color:var(--cyan)}.jr::after{content:"\2197";flex:none;color:var(--mute)}
-/* v5: logo in header and footer */
+/* v6: embedded wordmark (header, footer, About) */
 .brand{display:flex;align-items:center;padding:4px 0}
-.bm{display:block;height:38px;width:auto}.bw{display:none;height:42px;width:auto}
-@media(min-width:760px){.bm{display:none}.hd .bw{display:block}}
-.ft .brand{display:block}.ft .bw{display:block;height:56px;margin-bottom:4px}
+.wm{--wh:46px;display:block;flex:none;height:var(--wh);width:calc(var(--wh)*3.078)}
+@media(min-width:760px){.wm{--wh:52px}}
+.ft .brand{display:block}.ft .wm{--wh:76px;margin-bottom:6px}
+.ab{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}.ab .wm{--wh:64px}
