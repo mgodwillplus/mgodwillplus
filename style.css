@@ -87,3 +87,27 @@ dialog::backdrop{background:rgba(0,0,0,.7)}.dn{padding:16px var(--pad) 20px}.dn 
 .pfoot{padding:12px var(--pad) 16px}.pfoot .chips{padding:0 0 10px}.pfoot p{margin-bottom:10px;color:#cfd9e8;font-size:14px}
 .plink{color:var(--cyan);font-size:14px;font-weight:600}
 html:has(dialog[open]){overflow:hidden}
+/* v3: preview clips */
+.th video,.hclip{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .4s}
+.th.live video,.hclip.on{opacity:1}
+/* v3: watch page */
+body[data-page=play] .hd{position:static}
+.pwrap{position:relative;z-index:15;aspect-ratio:16/9;background:#000}.pwrap.au{aspect-ratio:auto;height:min(62vw,240px)}
+.pwrap iframe{display:block;width:100%;height:100%;border:0}
+@media(max-width:979px) and (orientation:portrait){.pwrap{position:sticky;top:0}}
+.pmain{display:contents}
+.pinfo{padding:14px var(--pad) 4px}.pinfo h1{font-size:clamp(32px,8vw,48px);margin:8px 0 2px}.pinfo .badge{position:static;display:inline-block}
+.meta{color:var(--mute);margin-bottom:8px}.pinfo p{max-width:62ch;color:#cfd9e8}.pinfo .chips{padding:10px 0 0}.pinfo .btns{margin-top:14px}
+.pside{padding:22px var(--pad) 0}.pside h2{font-size:28px;margin-bottom:10px}
+.pgrid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr))}
+@media(min-width:980px){.pl{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:28px;align-items:start;padding:20px var(--pad) 0}
+.pmain{display:block}.pwrap{position:relative}.pinfo{padding:14px 0 0}.pside{padding:0}.pgrid{grid-template-columns:1fr}}
+/* v3: full screen (real, or full-viewport fallback for phones that block it) */
+.xx{display:none;position:absolute;top:max(8px,env(safe-area-inset-top));left:8px;z-index:2;min-height:36px;padding:0 12px;font-size:13px;background:rgba(0,0,0,.65)}
+.rot{display:none}
+.pwrap.xl{position:fixed;inset:0;z-index:1000;width:100vw;height:100vh;height:100dvh;aspect-ratio:auto}
+.pwrap.xl .xx{display:inline-flex}
+.pwrap:fullscreen{aspect-ratio:auto;width:100%;height:100%}.pwrap:fullscreen .xx{display:inline-flex}
+.pwrap:-webkit-full-screen{aspect-ratio:auto;width:100%;height:100%}
+@media(orientation:portrait){.pwrap.xl .rot{display:block;position:absolute;left:0;right:0;top:54px;text-align:center;color:var(--mute);font-size:13px;pointer-events:none}}
+html.xlock{overflow:hidden}
