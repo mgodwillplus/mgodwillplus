@@ -1,4 +1,4 @@
-/* MGodwill+ app.js (v6) — reads catalogue.js (never modifies it). Videos/audio play on play.html via Drive's embedded player. */
+/* MGodwill+ app.js (v7) — reads catalogue.js (never modifies it). Videos/audio play on play.html via Drive's embedded player. */
 (function () {
   'use strict';
   /* the three-animal wordmark, embedded so it never depends on an image file loading */
@@ -6,7 +6,8 @@
   function WM(cls) { return '<svg class="wm ' + (cls || '') + '" viewBox="0 0 671 218" aria-hidden="true" focusable="false" fill="url(#mgm)"><use href="#mgw"></use></svg>'; }
   var SPRITE = '<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="mgm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="#dbe4f0"/><stop offset="1" stop-color="#a9b8cd"/></linearGradient></defs><symbol id="mgw" viewBox="0 0 671 218"><path fill-rule="evenodd" d="' + WMD + '"/></symbol></svg>';
   var LBL = { watch: 'Video', music: 'Music', podcasts: 'Podcast', journal: 'Journal' };
-  var NAV = [['index.html', 'Home', 'home'], ['watch.html', 'Watch', 'watch'], ['music.html', 'Music', 'music'], ['podcasts.html', 'Podcasts', 'podcasts'], ['journal.html', 'Journal', 'journal'], ['about.html', 'About', 'about']];
+  var NAV = [['index.html', 'Home', 'home'], ['watch.html', 'Watch', 'watch'], ['music.html', 'Music', 'music'], ['podcasts.html', 'Podcasts', 'podcasts'], ['books.html', 'Books', 'books'], ['journal.html', 'Journal', 'journal'], ['about.html', 'About', 'about']];
+  if (typeof MG_SUPABASE !== 'undefined' && MG_SUPABASE.key) NAV.splice(5, 0, ['photos.html', 'Photos', 'photos']); /* v7: shown once the gallery is connected */
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var PAGE = document.body.getAttribute('data-page') || 'home';
@@ -119,6 +120,56 @@
     });
   }
 
+  /* ---- books: read online (the text lives in books.js) ---- */
+  var BOOKS = typeof MGODWILL_BOOKS !== 'undefined' ? MGODWILL_BOOKS : [];
+  function bookById(id) { return BOOKS.filter(function (b) { return b.id === id; })[0]; }
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function chapHref(b, c) { return 'read.html?b=' + encodeURIComponent(b.id) + (c == null ? '' : '&c=' + c); }
+  function bookCard(b) {
+    var pos = +lsGet('mg_read_' + b.id) || 0;
+    return '<article class="bk"><a class="cl" href="' + esc(chapHref(b, pos || null)) + '"><div class="bkc" data-i="' + esc(b.title.charAt(0)) + '">' +
+      (b.cover ? '<img src="' + esc(b.cover) + '" alt="Cover of ' + esc(b.title) + '" loading="lazy" decoding="async">' : '') + (pos ? '<span class="badge">Continue</span>' : '') +
+      '</div><div class="ct"><h3>' + esc(b.title) + '</h3><p>' + esc(b.subtitle || '') + '</p></div></a></article>';
+  }
+  function booksRow() {
+    return BOOKS.length ? '<section class="sec"><div class="sh"><h2>Books</h2><a href="books.html">See all</a></div><div class="rail">' + BOOKS.map(bookCard).join('') + '</div></section>' : '';
+  }
+  function blocksHTML(ch) {
+    return ch.b.map(function (x) {
+      return x[0] === 'p' ? '<p>' + esc(x[1]) + '</p>' : x[0] === 'h' ? '<h3 class="vh">' + esc(x[1]) + '</h3>' : x[0] === 's' ? '<p class="sg">' + esc(x[1]) + '</p>' :
+        '<p class="vs">' + x[1].map(function (l) { return '<span class="vl">' + esc(l) + '</span>'; }).join('') + '</p>';
+    }).join('');
+  }
+  function tocHTML(b) {
+    var o = '', last = '';
+    b.chapters.forEach(function (ch, i) {
+      if (ch.p !== last) { o += '<h3 class="tp">' + esc(ch.p) + '</h3>'; last = ch.p; }
+      o += '<a class="tl" href="' + esc(chapHref(b, i)) + '">' + esc(ch.short || ch.t) + '</a>';
+    });
+    return o;
+  }
+  function readPage() {
+    var q = new URLSearchParams(location.search), b = bookById(q.get('b'));
+    if (!b) { app.innerHTML = '<div class="pg"><h1>Not found</h1><p class="lead">We couldn’t find that book.</p><div class="btns" style="padding:0 var(--pad)"><a class="btn pri" href="books.html">Browse books</a></div></div>'; return; }
+    var last = b.chapters.length - 1, c = q.get('c') === null ? -1 : Math.max(0, Math.min(last, +q.get('c') || 0));
+    var pdf = b.pdf ? '<a class="btn" href="' + esc(b.pdf) + '" download>Download PDF</a>' : '';
+    if (c < 0) {
+      var pos = +lsGet('mg_read_' + b.id) || 0; document.title = b.title + ' | MGodwill+';
+      app.innerHTML = '<div class="bkhome"><div class="bkc big" data-i="' + esc(b.title.charAt(0)) + '">' + (b.cover ? '<img src="' + esc(b.cover) + '" alt="Cover of ' + esc(b.title) + '">' : '') + '</div>' +
+        '<div class="bkinfo"><h1>' + esc(b.title) + '</h1><p class="meta">' + esc(b.subtitle || '') + '</p><p class="by">By ' + esc(b.author || '') + '</p>' + (b.description ? '<p>' + esc(b.description) + '</p>' : '') +
+        '<div class="btns"><a class="btn pri" href="' + esc(chapHref(b, pos)) + '">' + (pos ? 'Continue reading' : 'Start reading') + '</a>' + pdf + '</div></div></div><section class="rd toc"><h2>Contents</h2>' + tocHTML(b) + '</section>';
+      return;
+    }
+    var ch = b.chapters[c]; document.title = (ch.short || ch.t) + ' | ' + b.title; lsSet('mg_read_' + b.id, c);
+    var fs = +lsGet('mg_fs') || 18, setfs = function (n) { fs = Math.max(15, Math.min(26, n)); document.documentElement.style.setProperty('--rfs', fs + 'px'); lsSet('mg_fs', fs); };
+    app.innerHTML = '<div id="rp"></div><div class="rdbar"><a class="btn" href="' + esc(chapHref(b)) + '">Contents</a><span class="sp"></span><button class="btn" type="button" id="fm" aria-label="Smaller text">A&minus;</button><button class="btn" type="button" id="fp" aria-label="Larger text">A+</button></div>' +
+      '<article class="rd"><p class="meta">' + esc(ch.p) + ' &middot; ' + (c + 1) + ' of ' + (last + 1) + '</p><h1>' + esc(ch.t) + '</h1>' + blocksHTML(ch) +
+      '<nav class="rdnav">' + (c > 0 ? '<a class="btn" href="' + esc(chapHref(b, c - 1)) + '">&larr; Previous</a>' : '<span></span>') +
+      (c < last ? '<a class="btn pri" href="' + esc(chapHref(b, c + 1)) + '">Next &rarr;</a>' : '<a class="btn pri" href="' + esc(chapHref(b)) + '">Back to contents</a>') + '</nav></article>';
+    setfs(fs); $('#fm').onclick = function () { setfs(fs - 1); }; $('#fp').onclick = function () { setfs(fs + 1); };
+    var bar = $('#rp'); window.addEventListener('scroll', function () { var h = document.documentElement.scrollHeight - innerHeight; bar.style.width = (h > 0 ? Math.min(100, scrollY / h * 100) : 0) + '%'; }, { passive: true });
+  }
   /* ---- shell ---- */
   document.body.insertAdjacentHTML('afterbegin',
     SPRITE + '<header class="hd"><a class="brand" href="index.html" aria-label="MGodwill+ home">' + WM() + '</a>' +
@@ -168,7 +219,7 @@
       var out = hero(h) + rail('Recently Viewed', rc) + rail('Films & Shorts', of('watch'), '<a href="watch.html">See all</a>');
       var seen = []; of('watch').forEach(function (i) { i.cats.forEach(function (c) { if (seen.indexOf(c) < 0) seen.push(c); }); });
       seen.forEach(function (c) { var l = of('watch').filter(function (i) { return i.cats.indexOf(c) > -1; }); if (l.length > 1) out += rail(c, l); });
-      out += sect('Music', of('music'), 'music', 'music.html', 5) + sect('Podcasts & Audio', of('podcasts'), 'podcasts', 'podcasts.html', 5);
+      out += sect('Music', of('music'), 'music', 'music.html', 5) + sect('Podcasts & Audio', of('podcasts'), 'podcasts', 'podcasts.html', 5) + booksRow();
       var j = of('journal');
       out += j.length ? sect('Journal', j, 'journal', 'journal.html', 6) : '<section class="sec"><div class="sh"><h2>Journal</h2></div>' + blogBtn + '</section>';
       app.innerHTML = out; heroClip(h);
@@ -227,6 +278,8 @@
       try { var rr = recent().filter(function (z) { return z !== cur.slug; }); rr.unshift(cur.slug); localStorage.setItem('mg_recent', JSON.stringify(rr.slice(0, 10))); } catch (e) {}
     }
   }
+  else if (PAGE === 'books') app.innerHTML = '<div class="pg"><h1>Books</h1><p class="lead">Read online, or download the PDF.</p>' + (BOOKS.length ? '<div class="grid bkgrid">' + BOOKS.map(bookCard).join('') + '</div>' : '<p class="empty">No books yet.</p>') + '</div>';
+  else if (PAGE === 'read') readPage();
   else if (PAGE === 'search') {
     app.innerHTML = '<div class="pg"><h1>Search</h1><input id="q" class="sin" type="search" placeholder="Search titles, descriptions, categories" aria-label="Search the catalogue" autocomplete="off"><div id="out"></div></div>';
     var q = $('#q'), go = function () {
@@ -245,7 +298,7 @@
     if (document.documentElement.classList.contains('intro-on')) {
       var sk = $('.iskip', intro); if (sk) sk.onclick = done;
       try { spotlight(intro, done); } catch (e) { done(); }
-      setTimeout(done, 7600); /* safety net */
+      setTimeout(done, 12600); /* safety net */
     } else done();
   }
   function spotlight(root, end) {
@@ -255,22 +308,26 @@
     var out = function (t) { return 1 + 2.4 * Math.pow(t - 1, 3) + 1.4 * Math.pow(t - 1, 2); }; /* overshoot, then settle */
     var K = [ /* time (s), x, y, radius, easing into this point */
       [0, .22 * W, .24 * H, .45 * lh, io], [.5, .22 * W, .24 * H, .45 * lh, io], [1.7, .8 * W, .74 * H, .5 * lh, io],
-      [2.5, .2 * W, .7 * H, .5 * lh, io], [3.2, cx - .3 * lw, cy - .28 * lh, .55 * lh, io], [3.8, cx + .28 * lw, cy + .3 * lh, .6 * lh, io],
-      [4.35, cx, cy, .95 * lh, out], [6, cx, cy, 1.02 * lh, io]];
+      [2.5, .2 * W, .7 * H, .5 * lh, io],
+      [3.5, .85 * W, .18 * H, .5 * lh, io], [4.4, cx + .62 * lw, cy - .55 * lh, .42 * lh, io], [5, .9 * W, .62 * H, .45 * lh, io], /* longer hunt: the light grazes the owl's ear, then drifts away */
+      [5.7, cx - .3 * lw, cy - .28 * lh, .55 * lh, io], [6.3, cx + .28 * lw, cy + .3 * lh, .6 * lh, io],
+      [6.85, cx, cy, .95 * lh, out], [11, cx, cy, 1.02 * lh, io]];
     var t0 = performance.now();
     function frame(now) {
       var t = (performance.now() - t0) / 1000, i = 0; /* one clock for start and frames */
       while (i < K.length - 2 && t > K[i + 1][0]) i++;
       var a = K[i], c = K[i + 1], e = c[4](Math.min(1, Math.max(0, (t - a[0]) / (c[0] - a[0]))));
-      var wob = t < 4.35 ? 1 : Math.max(0, 1 - (t - 4.35) * 1.2); /* hand-held tremor that calms once the light settles */
+      var wob = t < 6.85 ? 1 : Math.max(0, 1 - (t - 6.85) * 1.2); /* hand-held tremor that calms once the light settles */
       var x = a[1] + (c[1] - a[1]) * e + Math.sin(t * 8.1) * 3 * wob, y = a[2] + (c[2] - a[2]) * e + Math.cos(t * 6.7) * 3 * wob, r = a[3] + (c[3] - a[3]) * e;
-      var k = t < .5 ? 0 : t < 1.3 ? (Math.sin(t * 58) + Math.sin(t * 33) > .5 ? 1 : .12) : (t > 5 && t < 5.09 ? .3 : 1); /* stuttering lamp, one late hiccup */
+      if (t > 6.85) r *= 1 + .02 * Math.sin((t - 6.85) * 1.6); /* the settled light breathes */
+      var fl = Math.sin(t * 58) + Math.sin(t * 33) > .5 ? 1 : .12, k = t < .5 ? 0 : (t < 1.3 || (t > 4.2 && t < 4.4)) ? fl : (t > 7.5 && t < 7.59 ? .3 : 1); /* stuttering lamp: at the start, once mid-hunt, one late hiccup */
       var p = x + 'px ' + y + 'px', k0 = 'rgba(0,0,0,' + (1 - k) + ')';
       veil.style.background = 'radial-gradient(circle at ' + p + ',' + k0 + ' 0,' + k0 + ' ' + r * .45 + 'px,rgba(0,0,0,' + (1 - k * .85) + ') ' + r * .72 + 'px,rgba(0,0,0,' + (1 - k * .25) + ') ' + r * .9 + 'px,#000 ' + r + 'px)';
       glow.style.background = 'radial-gradient(circle at ' + p + ',rgba(170,205,255,' + .2 * k + '),rgba(170,205,255,' + .07 * k + ') ' + r * .6 + 'px,transparent ' + r + 'px)';
-      gl.setAttribute('gradientTransform', 'translate(' + (-300 + Math.min(1, Math.max(0, (t - 4.5) / 1.3)) * 1150) + ' 0) rotate(20)'); /* the glint */
-      if (t > 5.9) root.style.opacity = Math.max(0, 1 - (t - 5.9) / .7);
-      if (t < 6.6 && root.parentNode) requestAnimationFrame(frame); else end();
+      var g1 = Math.min(1, Math.max(0, (t - 7) / 1.3)), g2 = Math.min(1, Math.max(0, (t - 9.4) / 1.3));
+      gl.setAttribute('gradientTransform', 'translate(' + (-300 + (t < 9.4 ? g1 : g2) * 1150) + ' 0) rotate(20)'); /* two glints */
+      if (t > 10.9) root.style.opacity = Math.max(0, 1 - (t - 10.9) / .7);
+      if (t < 11.6 && root.parentNode) requestAnimationFrame(frame); else end();
     }
     requestAnimationFrame(frame);
   }
