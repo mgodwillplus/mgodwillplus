@@ -89,7 +89,10 @@
         .then(function () { liked = want; btn.setAttribute('aria-pressed', liked); return stats(); }, function (e) { eh.textContent = e.message; }).then(function () { btn.disabled = false; });
     };
   }
-  if (PAGE === 'play') { var pi = $('.pinfo'), pid = new URLSearchParams(location.search).get('id') || ''; if (pi && /^[A-Za-z0-9_-]{1,80}$/.test(pid)) engage(pi, 'play:' + pid); return; }
+  if (PAGE === 'play') { /* the page may be drawn again when an added video arrives, so check each time */
+    var pid = new URLSearchParams(location.search).get('id') || '', tryEng = function () { var pi = $('.pinfo'); if (pi && !$('.eng', pi) && /^[A-Za-z0-9_-]{1,80}$/.test(pid)) engage(pi, 'play:' + pid); };
+    tryEng(); document.addEventListener('mg:rendered', tryEng); return;
+  }
 
   /* ---- account: sign in, create an account, reset a password ---- */
   if (PAGE === 'account') {
@@ -137,13 +140,15 @@
 
   /* ---- home: a Photography row, only if there is something to show ---- */
   if (PAGE === 'home') {
-    api(T + LIST.replace('limit=200', 'limit=8')).then(function (rows) {
-      if (!rows || !rows.length) return;
-      var sec = document.createElement('section'); sec.className = 'sec';
-      sec.innerHTML = '<div class="sh"><h2>Photography</h2><a href="photos.html">See all</a></div><div class="rail">' + rows.map(tile).join('') + '</div>';
+    var prow = null, put = function () {
+      if (!prow || !prow.length || document.getElementById('phsec')) return;
+      var sec = document.createElement('section'); sec.className = 'sec'; sec.id = 'phsec';
+      sec.innerHTML = '<div class="sh"><h2>Photography</h2><a href="photos.html">See all</a></div><div class="rail">' + prow.map(tile).join('') + '</div>';
       var jr = [].slice.call(document.querySelectorAll('#app .sec')).filter(function (x) { return /Journal/.test(x.textContent.slice(0, 40)); })[0];
       if (jr) jr.parentNode.insertBefore(sec, jr); else app.appendChild(sec);
-    }, function () {});
+    };
+    document.addEventListener('mg:rendered', put); /* the page redraws when videos arrive; put the row back */
+    api(T + LIST.replace('limit=200', 'limit=8')).then(function (rows) { prow = rows || []; put(); }, function () {});
     return;
   }
 
@@ -185,7 +190,7 @@
   if (PAGE === 'admin') {
     var editing = null, rowsCache = [];
     var login = function (note) {
-      app.innerHTML = '<div class="adm"><h1>Sign in</h1><p class="lead">For the owner of MGodwill+ only.</p><form id="lf"><label class="fld">Email<input id="em" type="email" autocomplete="username" required></label><label class="fld">Password<input id="pw" type="password" autocomplete="current-password" required></label><p class="err" id="er">' + esc(note || '') + '</p><button class="btn pri" type="submit">Sign in</button></form></div>';
+      app.innerHTML = '<div class="adm"><p class="anav"><a href="admin.html" aria-current="page">Photographs</a><a href="admin-media.html">Videos, songs &amp; TV</a></p><h1>Sign in</h1><p class="lead">For the owner of MGodwill+ only.</p><form id="lf"><label class="fld">Email<input id="em" type="email" autocomplete="username" required></label><label class="fld">Password<input id="pw" type="password" autocomplete="current-password" required></label><p class="err" id="er">' + esc(note || '') + '</p><button class="btn pri" type="submit">Sign in</button></form></div>';
       $('#lf').onsubmit = function (e) {
         e.preventDefault(); $('#er').textContent = '';
         api('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: $('#em').value.trim(), password: $('#pw').value } }).then(function (s) { setSess(s); manage(); }, function (er) { $('#er').textContent = er.message; });
@@ -193,7 +198,7 @@
     };
     var manage = function () {
       var s = sess(); if (!s) return login();
-      app.innerHTML = '<div class="adm"><div class="admtop"><h1>Gallery</h1><button class="btn" type="button" id="so">Sign out</button></div><p class="lead" id="who">' + esc((s.user && s.user.email) || '') + '</p>' +
+      app.innerHTML = '<div class="adm"><p class="anav"><a href="admin.html" aria-current="page">Photographs</a><a href="admin-media.html">Videos, songs &amp; TV</a></p><div class="admtop"><h1>Gallery</h1><button class="btn" type="button" id="so">Sign out</button></div><p class="lead" id="who">' + esc((s.user && s.user.email) || '') + '</p>' +
         '<form id="pf"><h2 id="ft">New photograph</h2><label class="fld">Photo link (Google Drive or any https link)<input id="iu" type="url" required placeholder="https://drive.google.com/file/d/…"></label><img id="pv" class="pv" alt="" hidden referrerpolicy="no-referrer">' +
         '<label class="fld">Title (optional)<input id="ti" type="text"></label><label class="fld">Album or category (optional)<input id="ca" type="text"></label>' +
         '<label class="fld">Description<textarea id="de" rows="3"></textarea></label><label class="fld">Article (optional)<textarea id="ar" rows="10" placeholder="Write the whole story here. Blank line = new paragraph. # Heading, - bullet, > quote, **bold**, *italic*, [text](https://link)"></textarea></label>' +
@@ -221,7 +226,7 @@
               '<div class="ab"><button class="btn" type="button" data-a="e" data-id="' + esc(p.id) + '">Edit</button><button class="btn" type="button" data-a="v" data-id="' + esc(p.id) + '">' + (p.published ? 'Hide' : 'Show') + '</button><button class="btn" type="button" data-a="d" data-id="' + esc(p.id) + '">Delete</button></div></div></div>';
           }).join('') : '<p class="empty">Nothing yet. Add your first photograph above.</p>';
           api('/rest/v1/mg_stats?select=item_key,views,likes&item_key=like.post:*').then(function (st) {
-            (st || []).forEach(function (s) { var sm = document.querySelector('[data-sid="' + s.item_key.slice(5) + '"]'); if (sm) sm.textContent += ' · ' + fmt(s.views) + ' views · ' + fmt(s.likes) + ' likes'; });
+            (st || []).forEach(function (s) { if (!s.item_key) return; var sm = document.querySelector('[data-sid="' + s.item_key.slice(5) + '"]'); if (sm) sm.textContent += ' · ' + fmt(s.views) + ' views · ' + fmt(s.likes) + ' likes'; });
           }, function () {});
         }, function (x) { $('#ls').innerHTML = '<p class="empty">' + esc(x.message) + '</p>'; if (x.status === 401) login('Please sign in again.'); });
       };

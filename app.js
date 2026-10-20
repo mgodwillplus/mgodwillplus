@@ -1,4 +1,4 @@
-/* MGodwill+ app.js (v7) — reads catalogue.js (never modifies it). Videos/audio play on play.html via Drive's embedded player. */
+/* MGodwill+ app.js (v9) — reads catalogue.js (never modifies it). Videos/audio play on play.html via Drive's embedded player. */
 (function () {
   'use strict';
   /* the three-animal wordmark, embedded so it never depends on an image file loading */
@@ -8,6 +8,7 @@
   var LBL = { watch: 'Video', music: 'Music', podcasts: 'Podcast', journal: 'Journal' };
   var NAV = [['index.html', 'Home', 'home'], ['watch.html', 'Watch', 'watch'], ['music.html', 'Music', 'music'], ['podcasts.html', 'Podcasts', 'podcasts'], ['books.html', 'Books', 'books'], ['journal.html', 'Journal', 'journal'], ['about.html', 'About', 'about']];
   if (typeof MG_SUPABASE !== 'undefined' && MG_SUPABASE.key) NAV.splice(5, 0, ['photos.html', 'Photos', 'photos']); /* v7: shown once the gallery is connected */
+  if (typeof MG_SUPABASE !== 'undefined' && MG_SUPABASE.key) NAV.splice(1, 0, ['tv.html', 'TV', 'tv']); /* v9: live TV */
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var PAGE = document.body.getAttribute('data-page') || 'home';
@@ -36,19 +37,35 @@
   items = items.filter(function (i) { return i.title; });
   items.forEach(function (i, n) { i.n = n; i.slug = i.id || 'item-' + n; }); /* original order kept */
   var of = function (k) { return items.filter(function (i) { return i.kind === k; }); };
+  var YTRE = /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|live\/|embed\/))([A-Za-z0-9_-]{11})/;
+  var ytid = function (u) { var m = YTRE.exec(u || ''); return m ? m[1] : ''; };
+  var pending = typeof MG_SUPABASE !== 'undefined' && !!MG_SUPABASE.key && PAGE === 'play'; /* a video added from admin may still be on its way */
+  function addExtra(rows) { /* videos, songs and podcasts added from admin-media.html join the catalogue's own, newest first */
+    var fresh = [];
+    (rows || []).forEach(function (r) {
+      var y = ytid(r.url), d = /\/file\/d\/([^/?#]+)/.exec(r.url || ''), id = 'm-' + r.id;
+      var it = { id: id, slug: id, title: String(r.title || '').trim(), desc: String(r.description || '').trim(), cats: r.category ? [String(r.category)] : [], type: r.kind,
+        kind: r.kind === 'music' ? 'music' : r.kind === 'podcast' ? 'podcasts' : 'watch', links: [{ url: r.url }], url: r.url,
+        thumb: y ? 'https://i.ytimg.com/vi/' + y + '/mqdefault.jpg' : d ? 'https://drive.google.com/thumbnail?id=' + d[1] + '&sz=w1000' : '' };
+      if (it.title && !items.some(function (z) { return z.id === id; })) fresh.push(it);
+    });
+    if (fresh.length) { items = fresh.concat(items); items.forEach(function (i, n) { i.n = n; }); }
+    return fresh.length;
+  }
 
   /* ---- templates ---- */
-  function playable(i) { return i.kind !== 'journal' && /\/file\/d\//.test(i.url || ''); }
+  function playable(i) { return i.kind !== 'journal' && (/\/file\/d\//.test(i.url || '') || !!ytid(i.url)); }
   function href(i, n) { return playable(i) ? 'play.html?id=' + encodeURIComponent(i.slug) + (n ? '&s=' + n : '') : i.url; }
   var tgt = function (i) { return playable(i) ? '' : ' target="_blank" rel="noopener"'; };
   function embedUrl(u) {
+    var y = ytid(u); if (y) return 'https://www.youtube-nocookie.com/embed/' + y + '?rel=0&modestbranding=1&playsinline=1';
     if (has(window.getDrivePreviewUrl)) return getDrivePreviewUrl(u);
     var m = String(u).match(/\/file\/d\/([^/]+)/);
     return m ? 'https://drive.google.com/file/d/' + m[1] + '/preview' : u;
   }
   function recent() { try { return JSON.parse(localStorage.getItem('mg_recent') || '[]'); } catch (e) { return []; } }
   function card(i) {
-    var clip = i.kind === 'watch' && playable(i) ? ' data-clip="previews/' + encodeURIComponent(i.slug) + '.mp4"' : '';
+    var clip = i.kind === 'watch' && playable(i) && !ytid(i.url) ? ' data-clip="previews/' + encodeURIComponent(i.slug) + '.mp4"' : '';
     var inner = '<div class="th" data-i="' + esc(i.title.charAt(0)) + '">' + (i.thumb ? '<img src="' + esc(i.thumb) + '" alt="' + esc(i.title) + '" loading="lazy" decoding="async" referrerpolicy="no-referrer">' : '') +
       '<span class="badge">' + LBL[i.kind] + '</span></div><div class="ct"><h3>' + esc(i.title) + '</h3><p>' + esc(i.cats[0] || LBL[i.kind]) + '</p></div>';
     return '<article class="card"' + clip + '>' + (i.url ? '<a class="cl" href="' + esc(href(i, 0)) + '"' + tgt(i) + '>' + inner + '</a>' : '<div class="cl">' + inner + '</div>') + '</article>';
@@ -89,9 +106,9 @@
   }
   function hero(i) {
     return '<section class="hero' + (i.thumb ? '' : ' no') + '">' + (i.thumb ? '<img src="' + esc(i.thumb) + '" alt="" fetchpriority="high" referrerpolicy="no-referrer">' : '') +
-      (i.kind === 'watch' && playable(i) ? '<video class="hclip" muted loop playsinline preload="metadata" aria-hidden="true"></video>' : '') + '<div class="hin"><span class="badge">' + LBL[i.kind] + '</span><h1>' + esc(i.title) + '</h1>' + (i.desc ? '<p>' + esc(i.desc) + '</p>' : '') +
+      (i.kind === 'watch' && playable(i) && !ytid(i.url) ? '<video class="hclip" muted loop playsinline preload="metadata" aria-hidden="true"></video>' : '') + '<div class="hin"><span class="badge">' + LBL[i.kind] + '</span><h1>' + esc(i.title) + '</h1>' + (i.desc ? '<p>' + esc(i.desc) + '</p>' : '') +
       '<div class="btns">' + (i.url ? '<a class="btn pri" href="' + esc(href(i, 0)) + '"' + tgt(i) + '>&#9654;&#xFE0E; ' + verb[i.kind] + '</a>' : '') +
-      '<button class="btn" type="button" id="more">More Info</button></div></div></section>';
+      '<button class="btn more" type="button" data-n="' + i.n + '">More Info</button></div></div></section>';
   }
   function info(i) {
     var d = $('#info');
@@ -174,6 +191,7 @@
   document.body.insertAdjacentHTML('afterbegin',
     SPRITE + '<header class="hd"><a class="brand" href="index.html" aria-label="MGodwill+ home">' + WM() + '</a>' +
     '<a class="sbtn" href="search.html" aria-label="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></a>' +
+    (typeof MG_SUPABASE !== 'undefined' && MG_SUPABASE.key ? '<a class="sbtn" href="account.html" aria-label="Account"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></a>' : '') +
     '<nav class="nav" aria-label="Main">' + NAV.map(function (n) { return '<a href="' + n[0] + '"' + (n[2] === PAGE ? ' aria-current="page"' : '') + '>' + n[1] + '</a>'; }).join('') + '</nav></header>');
   document.body.insertAdjacentHTML('beforeend',
     '<footer class="ft"><span class="brand" role="img" aria-label="MGodwill+">' + WM() + '</span><p>A creative universe for film, music, audio, podcasts and writing. Media is hosted by third-party services such as Google Drive; videos and audio play here through their embedded player.</p>' +
@@ -200,96 +218,137 @@
       });
     });
   }
-  function heroClip(i) {
-    var v = $('.hclip'); if (!v || calm) return;
-    v.muted = true; v.src = 'previews/' + encodeURIComponent(i.slug) + '.mp4';
-    v.onerror = function () { v.remove(); }; v.onplaying = function () { v.classList.add('on'); };
-    var p = v.play(); if (p && p.catch) p.catch(function () {});
+  /* ---- featured carousel: several videos that slide sideways by themselves ---- */
+  var HERO_IDS = ['outreach-trailer', 'erin-and-aurora', 'kisumu-mini-qati', 'first-animation', 'happy-sunday', 'code-society', 'vision-plus']; /* edit this list to change the slides */
+  var carTimer = null;
+  function heroList() {
+    var l = HERO_IDS.map(function (id) { return items.filter(function (i) { return i.id === id; })[0]; }).filter(Boolean);
+    if (l.length < 3) of('watch').forEach(function (i) { if (i.thumb && l.length < 6 && l.indexOf(i) < 0) l.push(i); });
+    return l.length ? l : [items[0]];
+  }
+  function heroCar(l) {
+    return '<section class="hcar" aria-roledescription="carousel" aria-label="Featured"><div class="htrack" tabindex="0">' + l.map(function (i) { return hero(i); }).join('') + '</div>' +
+      (l.length > 1 ? '<button class="hnav prev" type="button" aria-label="Previous">&#8249;</button><button class="hnav next" type="button" aria-label="Next">&#8250;</button><div class="hdots">' + l.map(function (z, k) { return '<button type="button" aria-label="Show slide ' + (k + 1) + '" aria-current="' + (k === 0) + '"></button>'; }).join('') + '</div>' : '') + '</section>';
+  }
+  function initCar(l) {
+    var root = $('.hcar'); if (!root) return;
+    var tr = $('.htrack', root), sl = [].slice.call(tr.children), dots = [].slice.call(root.querySelectorAll('.hdots button')), idx = 0, hold = false, rel = null, st = null;
+    function clips() { /* only the slide on show plays its silent clip */
+      sl.forEach(function (s, k) {
+        var v = $('.hclip', s); if (!v || calm) return;
+        if (k === idx) {
+          if (!v.getAttribute('src')) { v.muted = true; v.src = 'previews/' + encodeURIComponent(l[k].slug) + '.mp4'; v.onerror = function () { v.remove(); }; v.onplaying = function () { v.classList.add('on'); }; }
+          var p = v.play(); if (p && p.catch) p.catch(function () {});
+        } else v.pause();
+      });
+    }
+    function mark(n) { idx = n; dots.forEach(function (d, k) { d.setAttribute('aria-current', k === n); }); clips(); }
+    function go(n, quick) { n = (n + sl.length) % sl.length; tr.scrollTo({ left: n * tr.clientWidth, behavior: quick ? 'auto' : 'smooth' }); mark(n); }
+    tr.addEventListener('scroll', function () { clearTimeout(st); st = setTimeout(function () { var n = Math.round(tr.scrollLeft / (tr.clientWidth || 1)); if (n !== idx) mark(n); }, 120); }, { passive: true });
+    var pause = function (ms) { hold = true; clearTimeout(rel); rel = setTimeout(function () { hold = false; }, ms || 9000); };
+    ['pointerdown', 'touchstart', 'wheel', 'keydown', 'focusin'].forEach(function (t) { root.addEventListener(t, function () { pause(); }, { passive: true }); });
+    root.addEventListener('mouseenter', function () { hold = true; clearTimeout(rel); });
+    root.addEventListener('mouseleave', function () { pause(1500); });
+    dots.forEach(function (d, k) { d.onclick = function () { go(k); }; });
+    var pv = $('.prev', root), nx = $('.next', root);
+    if (pv) pv.onclick = function () { go(idx - 1); }; if (nx) nx.onclick = function () { go(idx + 1); };
+    if (sl.length > 1 && !calm) carTimer = setInterval(function () { if (!hold && !document.hidden) go(idx + 1); }, 6000);
+    window.addEventListener('resize', function () { if (root.isConnected) go(idx, true); });
+    clips();
   }
   document.addEventListener('error', function (e) { var p = e.target.tagName === 'IMG' && e.target.parentElement; if (p) p.classList.add('no'); }, true);
 
   /* ---- pages ---- */
   var empty = '<p class="empty">No catalogue entries found. Make sure <b>catalogue.js</b> sits in the same folder as this page and loads before app.js.</p>';
   var blogBtn = '<div class="btns" style="padding:0 var(--pad) 18px"><a class="btn pri" href="' + JOURNAL_URL + '" target="_blank" rel="noopener">Open the journal</a></div>';
-  if (PAGE === 'home') {
-    if (!items.length) app.innerHTML = empty;
-    else {
-      var h = items.filter(function (i) { return i.id === FEATURED_ID; })[0] || of('watch').filter(function (i) { return i.thumb; })[0] || items[0];
-      var rc = recent().map(function (z) { return items.filter(function (i) { return i.slug === z; })[0]; }).filter(function (z) { return z && z.kind === 'watch'; });
-      var out = hero(h) + rail('Recently Viewed', rc) + rail('Films & Shorts', of('watch'), '<a href="watch.html">See all</a>');
-      var seen = []; of('watch').forEach(function (i) { i.cats.forEach(function (c) { if (seen.indexOf(c) < 0) seen.push(c); }); });
-      seen.forEach(function (c) { var l = of('watch').filter(function (i) { return i.cats.indexOf(c) > -1; }); if (l.length > 1) out += rail(c, l); });
-      out += sect('Music', of('music'), 'music', 'music.html', 5) + sect('Podcasts & Audio', of('podcasts'), 'podcasts', 'podcasts.html', 5) + booksRow();
-      var j = of('journal');
-      out += j.length ? sect('Journal', j, 'journal', 'journal.html', 6) : '<section class="sec"><div class="sh"><h2>Journal</h2></div>' + blogBtn + '</section>';
-      app.innerHTML = out; heroClip(h);
-      var m = $('#more'); if (m) m.onclick = function () { info(h); };
-    }
-  } else if (PAGE === 'watch') listPage('Watch', 'Films, shorts and videos. Tap any video to watch it here.', of('watch'), '', true);
-  else if (PAGE === 'music') listPage('Music', 'Songs and music. Tap any track to listen here.', of('music'));
-  else if (PAGE === 'podcasts') listPage('Podcasts &amp; Audio', 'Podcasts and audio. Tap any episode to listen here.', of('podcasts'));
-  else if (PAGE === 'journal') listPage('Journal', 'Writing and updates from the blog.', of('journal'), blogBtn);
-  else if (PAGE === 'about') app.innerHTML = '<div class="pg"><h1 class="ab">About <span role="img" aria-label="MGodwill+">' + WM() + '</span></h1>' + aboutPhoto() + '<div class="prose">' +
-    '<p>MGodwill+ is a growing creative universe built around the idea that a person’s work should not have to live in scattered corners of the internet. Film and video, editing, music, audio, podcasts, writing, photography and visual storytelling can all belong to one coherent experience.</p>' +
-    '<p>Rather than pretending to be a giant streaming corporation, MGodwill+ takes inspiration from the clarity and atmosphere of premium streaming interfaces: a strong featured presentation, carefully organised collections, and a visual identity that makes exploring the work feel intentional. The aim is to give every project a proper place and let the work speak for itself.</p>' +
-    '<p>The platform is designed with a practical principle: the catalogue and experience can live here while the media itself remains on reliable external services. That keeps the project lightweight and affordable, avoids unnecessary duplication of large files, and lets visitors follow the original source when they choose to watch or listen.</p>' +
-    '<p>MGodwill+ is being developed resourcefully, with free tools and a phone-first workflow, but with ambitions that are not limited by the modesty of its starting point. It is a work in progress: a home for creative experiments, finished pieces, developing ideas and whatever the next chapter brings.</p></div></div>';
-  else if (PAGE === 'play') {
-    var qs = new URLSearchParams(location.search), cur = items.filter(function (i) { return i.slug === qs.get('id') && playable(i); })[0];
-    if (!cur) app.innerHTML = '<div class="pg"><h1>Not found</h1><p class="lead">We couldn’t find that item.</p><div class="btns" style="padding:0 var(--pad)"><a class="btn pri" href="watch.html">Browse videos</a></div></div>';
-    else {
-      var s0 = Math.min(Math.max(+qs.get('s') || 0, 0), cur.links.length - 1);
-      document.title = cur.title + ' | MGodwill+';
-      var rel = items.filter(function (x) { return x !== cur && x.kind === cur.kind && playable(x); });
-      rel = rel.filter(function (x) { return x.cats[0] === cur.cats[0]; }).concat(rel.filter(function (x) { return x.cats[0] !== cur.cats[0]; })).slice(0, 12);
-      app.innerHTML = '<div class="pl"><div class="pmain"><div class="pwrap' + (cur.kind === 'watch' ? '' : ' au') + '" id="pwrap"><iframe id="pf" src="' + esc(embedUrl(cur.links[s0].url)) + '" title="' + esc(cur.title) + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>' +
-        '<button class="btn xx" type="button" id="xx">&times; Exit full screen</button><span class="rot">Rotate your phone for a bigger picture</span></div>' +
-        '<div class="pinfo"><span class="badge">' + LBL[cur.kind] + '</span><h1>' + esc(cur.title) + '</h1><p class="meta">' + esc(cur.cats.join(', ')) + '</p>' + (cur.desc ? '<p>' + esc(cur.desc) + '</p>' : '') +
-        (cur.links.length > 1 ? '<div class="chips" role="group" aria-label="Choose source">' + cur.links.map(function (l, k) { return '<button class="chip" type="button" data-s="' + k + '" aria-pressed="' + (k === s0) + '">Source ' + (k + 1) + '</button>'; }).join('') + '</div>' : '') +
-        '<div class="btns"><button class="btn pri" type="button" id="fs">Full screen</button><button class="btn" type="button" id="sh">Share</button><a class="btn" id="od" href="' + esc(cur.links[s0].url) + '" target="_blank" rel="noopener">Open in Google Drive</a></div></div></div>' +
-        (rel.length ? '<aside class="pside"><h2>More like this</h2>' + (cur.kind === 'watch' ? '<div class="pgrid">' + rel.map(card).join('') + '</div>' : '<div class="rows">' + rel.map(row).join('') + '</div>') + '</aside>' : '') + '</div>';
-      var box = $('#pwrap'), fsb = $('#fs'), inFs = function () { return document.fullscreenElement || document.webkitFullscreenElement; };
-      var xset = function (on) { box.classList.toggle('xl', on); document.documentElement.classList.toggle('xlock', on); fsb.textContent = on ? 'Exit full screen' : 'Full screen'; };
-      var toggleFs = function () {
-        if (box.classList.contains('xl')) { xset(false); return; }
-        if (inFs()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
-        var rq = box.requestFullscreen || box.webkitRequestFullscreen;
-        if (!rq) { xset(true); return; } /* e.g. iPhone Safari: fall back to a full-viewport player */
-        try {
-          var r = rq.call(box);
-          if (r && r.then) r.then(function () { try { screen.orientation.lock('landscape').catch(function () {}); } catch (e) {} }, function () { xset(true); });
-        } catch (e) { xset(true); }
-      };
-      fsb.onclick = $('#xx').onclick = toggleFs;
-      ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (t) { document.addEventListener(t, function () { fsb.textContent = inFs() ? 'Exit full screen' : 'Full screen'; }); });
-      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('xl')) xset(false); });
-      app.querySelectorAll('.chip').forEach(function (b) {
-        b.onclick = function () {
-          var k = +b.getAttribute('data-s');
-          app.querySelectorAll('.chip').forEach(function (x) { x.setAttribute('aria-pressed', x === b); });
-          $('#pf').src = embedUrl(cur.links[k].url); $('#od').href = cur.links[k].url;
+  function renderPage() {
+    if (carTimer) { clearInterval(carTimer); carTimer = null; }
+    if (PAGE === 'home') {
+      if (!items.length) app.innerHTML = empty;
+      else {
+        var hl = heroList();
+        var rc = recent().map(function (z) { return items.filter(function (i) { return i.slug === z; })[0]; }).filter(function (z) { return z && z.kind === 'watch'; });
+        var out = heroCar(hl) + rail('Recently Viewed', rc) + rail('Films & Shorts', of('watch'), '<a href="watch.html">See all</a>');
+        var seen = []; of('watch').forEach(function (i) { i.cats.forEach(function (c) { if (seen.indexOf(c) < 0) seen.push(c); }); });
+        seen.forEach(function (c) { var l = of('watch').filter(function (i) { return i.cats.indexOf(c) > -1; }); if (l.length > 1) out += rail(c, l); });
+        out += sect('Music', of('music'), 'music', 'music.html', 5) + sect('Podcasts & Audio', of('podcasts'), 'podcasts', 'podcasts.html', 5) + booksRow();
+        var j = of('journal');
+        out += j.length ? sect('Journal', j, 'journal', 'journal.html', 6) : '<section class="sec"><div class="sh"><h2>Journal</h2></div>' + blogBtn + '</section>';
+        app.innerHTML = out; initCar(hl);
+      }
+    } else if (PAGE === 'watch') listPage('Watch', 'Films, shorts and videos. Tap any video to watch it here.', of('watch'), '', true);
+    else if (PAGE === 'music') listPage('Music', 'Songs and music. Tap any track to listen here.', of('music'));
+    else if (PAGE === 'podcasts') listPage('Podcasts &amp; Audio', 'Podcasts and audio. Tap any episode to listen here.', of('podcasts'));
+    else if (PAGE === 'journal') listPage('Journal', 'Writing and updates from the blog.', of('journal'), blogBtn);
+    else if (PAGE === 'about') app.innerHTML = '<div class="pg"><h1 class="ab">About <span role="img" aria-label="MGodwill+">' + WM() + '</span></h1>' + aboutPhoto() + '<div class="prose">' +
+      '<p>MGodwill+ is a growing creative universe built around the idea that a person’s work should not have to live in scattered corners of the internet. Film and video, editing, music, audio, podcasts, writing, photography and visual storytelling can all belong to one coherent experience.</p>' +
+      '<p>Rather than pretending to be a giant streaming corporation, MGodwill+ takes inspiration from the clarity and atmosphere of premium streaming interfaces: a strong featured presentation, carefully organised collections, and a visual identity that makes exploring the work feel intentional. The aim is to give every project a proper place and let the work speak for itself.</p>' +
+      '<p>The platform is designed with a practical principle: the catalogue and experience can live here while the media itself remains on reliable external services. That keeps the project lightweight and affordable, avoids unnecessary duplication of large files, and lets visitors follow the original source when they choose to watch or listen.</p>' +
+      '<p>MGodwill+ is being developed resourcefully, with free tools and a phone-first workflow, but with ambitions that are not limited by the modesty of its starting point. It is a work in progress: a home for creative experiments, finished pieces, developing ideas and whatever the next chapter brings.</p></div></div>';
+    else if (PAGE === 'play') {
+      var qs = new URLSearchParams(location.search), cur = items.filter(function (i) { return i.slug === qs.get('id') && playable(i); })[0];
+      if (!cur) app.innerHTML = pending ? '<div class="pg"><p class="empty">Loading…</p></div>' : '<div class="pg"><h1>Not found</h1><p class="lead">We couldn’t find that item.</p><div class="btns" style="padding:0 var(--pad)"><a class="btn pri" href="watch.html">Browse videos</a></div></div>';
+      else {
+        var s0 = Math.min(Math.max(+qs.get('s') || 0, 0), cur.links.length - 1);
+        document.title = cur.title + ' | MGodwill+';
+        var rel = items.filter(function (x) { return x !== cur && x.kind === cur.kind && playable(x); });
+        rel = rel.filter(function (x) { return x.cats[0] === cur.cats[0]; }).concat(rel.filter(function (x) { return x.cats[0] !== cur.cats[0]; })).slice(0, 12);
+        app.innerHTML = '<div class="pl"><div class="pmain"><div class="pwrap' + (cur.kind === 'watch' ? '' : ' au') + '" id="pwrap"><iframe id="pf" src="' + esc(embedUrl(cur.links[s0].url)) + '" title="' + esc(cur.title) + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>' +
+          '<button class="btn xx" type="button" id="xx">&times; Exit full screen</button><span class="rot">Rotate your phone for a bigger picture</span></div>' +
+          '<div class="pinfo"><span class="badge">' + LBL[cur.kind] + '</span><h1>' + esc(cur.title) + '</h1><p class="meta">' + esc(cur.cats.join(', ')) + '</p>' + (cur.desc ? '<p>' + esc(cur.desc) + '</p>' : '') +
+          (cur.links.length > 1 ? '<div class="chips" role="group" aria-label="Choose source">' + cur.links.map(function (l, k) { return '<button class="chip" type="button" data-s="' + k + '" aria-pressed="' + (k === s0) + '">Source ' + (k + 1) + '</button>'; }).join('') + '</div>' : '') +
+          '<div class="btns"><button class="btn pri" type="button" id="fs">Full screen</button><button class="btn" type="button" id="sh">Share</button><a class="btn" id="od" href="' + esc(cur.links[s0].url) + '" target="_blank" rel="noopener">' + (ytid(cur.links[s0].url) ? 'Open on YouTube' : 'Open in Google Drive') + '</a></div></div></div>' +
+          (rel.length ? '<aside class="pside"><h2>More like this</h2>' + (cur.kind === 'watch' ? '<div class="pgrid">' + rel.map(card).join('') + '</div>' : '<div class="rows">' + rel.map(row).join('') + '</div>') + '</aside>' : '') + '</div>';
+        var box = $('#pwrap'), fsb = $('#fs'), inFs = function () { return document.fullscreenElement || document.webkitFullscreenElement; };
+        var xset = function (on) { box.classList.toggle('xl', on); document.documentElement.classList.toggle('xlock', on); fsb.textContent = on ? 'Exit full screen' : 'Full screen'; };
+        var toggleFs = function () {
+          if (box.classList.contains('xl')) { xset(false); return; }
+          if (inFs()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+          var rq = box.requestFullscreen || box.webkitRequestFullscreen;
+          if (!rq) { xset(true); return; } /* e.g. iPhone Safari: fall back to a full-viewport player */
+          try {
+            var r = rq.call(box);
+            if (r && r.then) r.then(function () { try { screen.orientation.lock('landscape').catch(function () {}); } catch (e) {} }, function () { xset(true); });
+          } catch (e) { xset(true); }
         };
-      });
-      $('#sh').onclick = function () {
-        var u = location.href, b = this;
-        if (navigator.share) { navigator.share({ title: cur.title, url: u }).catch(function () {}); return; }
-        (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(function () { b.textContent = 'Link copied'; setTimeout(function () { b.textContent = 'Share'; }, 2000); }, function () { window.prompt('Copy this link', u); });
-      };
-      try { var rr = recent().filter(function (z) { return z !== cur.slug; }); rr.unshift(cur.slug); localStorage.setItem('mg_recent', JSON.stringify(rr.slice(0, 10))); } catch (e) {}
+        fsb.onclick = $('#xx').onclick = toggleFs;
+        ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (t) { document.addEventListener(t, function () { fsb.textContent = inFs() ? 'Exit full screen' : 'Full screen'; }); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('xl')) xset(false); });
+        app.querySelectorAll('.chip').forEach(function (b) {
+          b.onclick = function () {
+            var k = +b.getAttribute('data-s');
+            app.querySelectorAll('.chip').forEach(function (x) { x.setAttribute('aria-pressed', x === b); });
+            $('#pf').src = embedUrl(cur.links[k].url); $('#od').href = cur.links[k].url;
+          };
+        });
+        $('#sh').onclick = function () {
+          var u = location.href, b = this;
+          if (navigator.share) { navigator.share({ title: cur.title, url: u }).catch(function () {}); return; }
+          (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(function () { b.textContent = 'Link copied'; setTimeout(function () { b.textContent = 'Share'; }, 2000); }, function () { window.prompt('Copy this link', u); });
+        };
+        try { var rr = recent().filter(function (z) { return z !== cur.slug; }); rr.unshift(cur.slug); localStorage.setItem('mg_recent', JSON.stringify(rr.slice(0, 10))); } catch (e) {}
+      }
     }
+    else if (PAGE === 'books') app.innerHTML = '<div class="pg"><h1>Books</h1><p class="lead">Read online, or download the PDF.</p>' + (BOOKS.length ? '<div class="grid bkgrid">' + BOOKS.map(bookCard).join('') + '</div>' : '<p class="empty">No books yet.</p>') + '</div>';
+    else if (PAGE === 'read') readPage();
+    else if (PAGE === 'search') {
+      app.innerHTML = '<div class="pg"><h1>Search</h1><input id="q" class="sin" type="search" placeholder="Search titles, descriptions, categories" aria-label="Search the catalogue" autocomplete="off"><div id="out"></div></div>';
+      var q = $('#q'), go = function () {
+        var v = q.value.trim().toLowerCase();
+        $('#out').innerHTML = !v ? '<p class="empty">Type to search the catalogue.</p>' : (function (r) { return r.length ? mixed(r) : '<p class="empty">No matches for “' + esc(q.value.trim()) + '”.</p>'; })(items.filter(function (i) {
+          return (i.title + ' ' + i.desc + ' ' + i.cats.join(' ') + ' ' + LBL[i.kind] + ' ' + i.type).toLowerCase().indexOf(v) > -1;
+        }));
+      };
+      q.value = new URLSearchParams(location.search).get('q') || ''; q.oninput = go; go();
+    }
+    [].forEach.call(app.querySelectorAll('.more'), function (b) { b.onclick = function () { info(items[+b.getAttribute('data-n')]); }; });
+    document.dispatchEvent(new Event('mg:rendered'));
   }
-  else if (PAGE === 'books') app.innerHTML = '<div class="pg"><h1>Books</h1><p class="lead">Read online, or download the PDF.</p>' + (BOOKS.length ? '<div class="grid bkgrid">' + BOOKS.map(bookCard).join('') + '</div>' : '<p class="empty">No books yet.</p>') + '</div>';
-  else if (PAGE === 'read') readPage();
-  else if (PAGE === 'search') {
-    app.innerHTML = '<div class="pg"><h1>Search</h1><input id="q" class="sin" type="search" placeholder="Search titles, descriptions, categories" aria-label="Search the catalogue" autocomplete="off"><div id="out"></div></div>';
-    var q = $('#q'), go = function () {
-      var v = q.value.trim().toLowerCase();
-      $('#out').innerHTML = !v ? '<p class="empty">Type to search the catalogue.</p>' : (function (r) { return r.length ? mixed(r) : '<p class="empty">No matches for “' + esc(q.value.trim()) + '”.</p>'; })(items.filter(function (i) {
-        return (i.title + ' ' + i.desc + ' ' + i.cats.join(' ') + ' ' + LBL[i.kind] + ' ' + i.type).toLowerCase().indexOf(v) > -1;
-      }));
-    };
-    q.value = new URLSearchParams(location.search).get('q') || ''; q.oninput = go; go();
-  }
+  renderPage();
+  window.MG = { /* media.js hands over videos and songs added from the admin page */
+    load: function (rows) { var had = pending; pending = false; if (addExtra(rows) || had) renderPage(); },
+    done: function () { var had = pending; pending = false; if (had) renderPage(); }
+  };
 
   /* ---- intro: a black stage, a roving spotlight, a metallic logo. Once per session; Skip always works ---- */
   var intro = $('#intro');
