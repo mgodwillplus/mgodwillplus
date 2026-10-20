@@ -3,12 +3,12 @@
 (function () {
   'use strict';
   var CFG = typeof MG_SUPABASE !== 'undefined' ? MG_SUPABASE : {}, PAGE = document.body.getAttribute('data-page'), app = document.getElementById('app');
-  if (['photos', 'post', 'admin', 'home'].indexOf(PAGE) < 0) return;
+  if (['photos', 'post', 'admin', 'home', 'account', 'play'].indexOf(PAGE) < 0) return;
   var ON = !!(CFG.url && CFG.key);
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var msg = function (h, t) { return '<div class="pg"><h1>' + h + '</h1><p class="lead">' + t + '</p></div>'; };
-  if (!ON) { if (PAGE !== 'home') app.innerHTML = msg('Photos', 'The gallery is being set up. Please check back soon.'); return; }
+  if (!ON) { if (['photos', 'post', 'admin', 'account'].indexOf(PAGE) >= 0) app.innerHTML = msg('Photos', 'The gallery is being set up. Please check back soon.'); return; }
 
   /* ---- Supabase over plain fetch (publishable key only; row-level security does the guarding) ---- */
   var SK = 'mg_sb_session';
@@ -59,6 +59,82 @@
   document.addEventListener('error', function (e) { if (e.target.tagName === 'IMG' && e.target.closest('.tile,.pimg')) e.target.classList.add('bad'); }, true);
   var LIST = '?select=id,created_at,title,description,image_url,category,has_article&published=eq.true&order=created_at.desc&limit=200';
 
+  /* ---- links from confirmation / reset emails arrive with a token in the address ---- */
+  var HS = location.hash.replace(/^#/, '');
+  if (/(^|&)(access_token|error_description)=/.test(HS)) {
+    var hp = new URLSearchParams(HS); history.replaceState(null, '', location.pathname + location.search);
+    if (hp.get('access_token')) {
+      var ns = { access_token: hp.get('access_token'), refresh_token: hp.get('refresh_token') }; setSess(ns);
+      api('/auth/v1/user', { auth: true }).then(function (u) { ns.user = u; setSess(ns); }, function () {}).then(function () { location.replace('account.html' + (hp.get('type') === 'recovery' ? '?mode=reset' : '?welcome=1')); });
+    } else { try { sessionStorage.setItem('mg_auth_err', hp.get('error_description') || 'That link did not work.'); } catch (e) {} location.replace('account.html'); }
+    return;
+  }
+  var enc = encodeURIComponent, fmt = function (n) { n = +n || 0; return n >= 1e6 ? (n / 1e6).toFixed(1).replace('.0', '') + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1).replace('.0', '') + 'k' : String(n); };
+
+  /* ---- likes and views: a like needs a free account; a view is counted once per visit ---- */
+  function engage(host, key) {
+    var ref = host.querySelector('.btns'); if (!ref) return;
+    var el = document.createElement('div'); el.className = 'eng';
+    el.innerHTML = '<button class="btn like" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span class="lc">0</span><span class="sr"> likes</span></button><span class="vw"><span class="vc">0</span> views</span><span class="eh" role="status"></span>';
+    ref.parentNode.insertBefore(el, ref);
+    var btn = $('.like', el), lc = $('.lc', el), vc = $('.vc', el), eh = $('.eh', el), liked = false, tk = 'mg_v_' + key, seen = null;
+    var stats = function () { return api('/rest/v1/mg_stats?select=views,likes&item_key=eq.' + enc(key)).then(function (r) { var s = (r && r[0]) || {}; lc.textContent = fmt(s.likes); vc.textContent = fmt(s.views); }, function () {}); };
+    try { seen = sessionStorage.getItem(tk); } catch (e) {}
+    (seen ? Promise.resolve() : api('/rest/v1/rpc/mg_track_view', { method: 'POST', body: { k: key } }).then(function () { try { sessionStorage.setItem(tk, '1'); } catch (e) {} }, function () {})).then(stats);
+    if (sess()) api('/rest/v1/mg_likes?select=item_key&item_key=eq.' + enc(key), { auth: true }).then(function (r) { liked = !!(r && r.length); btn.setAttribute('aria-pressed', liked); }, function () {});
+    btn.onclick = function () {
+      if (!sess()) { location.href = 'account.html?next=' + enc(location.pathname.split('/').pop() + location.search); return; }
+      var want = !liked; eh.textContent = ''; btn.disabled = true;
+      api(want ? '/rest/v1/mg_likes' : '/rest/v1/mg_likes?item_key=eq.' + enc(key), { method: want ? 'POST' : 'DELETE', body: want ? { item_key: key } : undefined, auth: true, prefer: 'return=minimal' }).then(null, function (e) { if (!(want && e.status === 409)) throw e; })
+        .then(function () { liked = want; btn.setAttribute('aria-pressed', liked); return stats(); }, function (e) { eh.textContent = e.message; }).then(function () { btn.disabled = false; });
+    };
+  }
+  if (PAGE === 'play') { var pi = $('.pinfo'), pid = new URLSearchParams(location.search).get('id') || ''; if (pi && /^[A-Za-z0-9_-]{1,80}$/.test(pid)) engage(pi, 'play:' + pid); return; }
+
+  /* ---- account: sign in, create an account, reset a password ---- */
+  if (PAGE === 'account') {
+    var Q = new URLSearchParams(location.search), back = (Q.get('next') || '');
+    back = /^[A-Za-z0-9_-]+\.html(\?[^#]*)?$/.test(back) ? back : '';
+    var here = location.origin + location.pathname.replace(/[^/]*$/, '') + 'account.html', note = '';
+    try { note = sessionStorage.getItem('mg_auth_err') || ''; sessionStorage.removeItem('mg_auth_err'); } catch (e) {}
+    if (Q.get('welcome')) note = 'Your email is confirmed. You are signed in.';
+    var shell = function (h, t, body) { app.innerHTML = '<div class="adm"><h1>' + h + '</h1><p class="lead">' + t + '</p>' + body + '</div>'; };
+    var say = function (m, bad) { var e = $('#er'); if (e) { e.textContent = m; e.className = bad ? 'err' : 'ok'; } };
+    var done = function (s) { setSess(s); location.href = back || 'account.html'; };
+    var signedIn = function () {
+      var s = sess(), who = (s.user && s.user.email) || 'your account';
+      shell('Account', esc(who), '<p class="' + (note ? 'ok' : 'err') + '" id="er">' + esc(note) + '</p><div class="btns" id="ab">' + (back ? '<a class="btn pri" href="' + esc(back) + '">&larr; Back to where you were</a>' : '') + '<button class="btn" type="button" id="so">Sign out</button></div>');
+      $('#so').onclick = function () { setSess(null); location.href = 'account.html'; };
+      api('/rest/v1/rpc/mg_is_admin', { method: 'POST', body: {}, auth: true }).then(function (v) { if (v === true) $('#ab').insertAdjacentHTML('afterbegin', '<a class="btn" href="admin.html">Gallery admin</a>'); }, function () {});
+    };
+    var reset = function () {
+      shell('New password', 'Choose a new password for your account.', '<form id="rf"><label class="fld">New password (at least 8 characters)<input id="np" type="password" minlength="8" autocomplete="new-password" required></label><p class="err" id="er"></p><button class="btn pri" type="submit">Save password</button></form>');
+      $('#rf').onsubmit = function (e) { e.preventDefault(); api('/auth/v1/user', { method: 'PUT', body: { password: $('#np').value }, auth: true }).then(function () { location.href = 'account.html'; }, function (x) { say(x.message, true); }); };
+    };
+    var forms = function (mode) {
+      var up = mode === 'up';
+      shell(up ? 'Create account' : 'Sign in', up ? 'A free account lets you like videos, songs and photographs.' : 'Welcome back.',
+        '<form id="af"><label class="fld">Email<input id="em" type="email" autocomplete="username" required></label><label class="fld">Password' + (up ? ' (at least 8 characters)' : '') + '<input id="pw" type="password" ' + (up ? 'minlength="8" autocomplete="new-password"' : 'autocomplete="current-password"') + ' required></label>' +
+        '<p class="' + (note ? 'ok' : 'err') + '" id="er">' + esc(note) + '</p><button class="btn pri" type="submit">' + (up ? 'Create account' : 'Sign in') + '</button></form>' +
+        '<p class="alt">' + (up ? 'Already have an account? <a href="#" id="sw">Sign in</a>' : 'New here? <a href="#" id="sw">Create an account</a> &middot; <a href="#" id="fp">Forgot password?</a>') + '</p>' +
+        (up ? '<p class="fine">Your email is used only to sign you in and to count likes. It is never shown to anyone.</p>' : ''));
+      $('#sw').onclick = function (e) { e.preventDefault(); note = ''; forms(up ? 'in' : 'up'); };
+      if (!up) $('#fp').onclick = function (e) {
+        e.preventDefault(); var m = $('#em').value.trim(); if (!m) { say('Type your email above first.', true); return; }
+        api('/auth/v1/recover?redirect_to=' + enc(here), { method: 'POST', body: { email: m } }).then(function () { say('If that address has an account, a reset link is on its way.'); }, function (x) { say(x.message, true); });
+      };
+      $('#af').onsubmit = function (e) {
+        e.preventDefault(); var m = $('#em').value.trim(), p = $('#pw').value; say('');
+        if (up) api('/auth/v1/signup?redirect_to=' + enc(here), { method: 'POST', body: { email: m, password: p } }).then(function (r) {
+          if (r && r.access_token) done(r); else say('Almost there. Check your inbox for a confirmation link, then come back and sign in.');
+        }, function (x) { say(x.message, true); });
+        else api('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: m, password: p } }).then(done, function (x) { say(x.message, true); });
+      };
+    };
+    if (Q.get('mode') === 'reset' && sess()) reset(); else if (sess()) signedIn(); else forms('in');
+    return;
+  }
+
   /* ---- home: a Photography row, only if there is something to show ---- */
   if (PAGE === 'home') {
     api(T + LIST.replace('limit=200', 'limit=8')).then(function (rows) {
@@ -100,6 +176,7 @@
         '<div class="pbody"><p class="meta">' + esc([p.category, when(p.created_at)].filter(Boolean).join(' · ')) + '</p>' + (p.title ? '<h1>' + esc(p.title) + '</h1>' : '') +
         (p.description ? '<p class="pdesc">' + esc(p.description) + '</p>' : '') + (p.article ? '<div class="art">' + md(p.article) + '</div>' : '') +
         '<div class="btns"><a class="btn pri" href="photos.html">&larr; All photos</a><a class="btn" href="' + esc(p.image_url) + '" target="_blank" rel="noopener">Open original</a></div></div></div>';
+      if (p.published) engage($('.pbody'), 'post:' + p.id);
     }, function () { app.innerHTML = msg('Photos', 'This photograph could not be loaded just now. Please try again shortly.'); });
     return;
   }
@@ -123,6 +200,7 @@
         '<label class="chk"><input id="pu" type="checkbox" checked> Published (visible to everyone)</label><p class="err" id="er"></p><div class="btns"><button class="btn pri" type="submit" id="sv">Publish</button><button class="btn" type="button" id="cn" hidden>Cancel editing</button></div></form>' +
         '<h2 class="lh">Your photographs</h2><div id="ls"><p class="empty">Loading…</p></div></div>';
       $('#so').onclick = function () { setSess(null); login(); };
+      api('/rest/v1/rpc/mg_is_admin', { method: 'POST', body: {}, auth: true }).then(function (v) { if (v === false) $('#who').insertAdjacentHTML('afterend', '<p class="err">This account is not the gallery owner, so publishing is switched off.</p>'); }, function () {});
       $('#iu').oninput = function () { var u = img(this.value, 500), p = $('#pv'); p.hidden = !u; if (u) p.src = u; };
       var reset = function () { editing = null; $('#pf').reset(); $('#pu').checked = true; $('#pv').hidden = true; $('#ft').textContent = 'New photograph'; $('#sv').textContent = 'Publish'; $('#cn').hidden = true; };
       $('#cn').onclick = reset;
@@ -139,9 +217,12 @@
         api(T + '?select=id,created_at,title,description,image_url,category,published,article&order=created_at.desc', { auth: true }).then(function (r) {
           rowsCache = r || [];
           $('#ls').innerHTML = rowsCache.length ? rowsCache.map(function (p) {
-            return '<div class="arow"><img src="' + esc(img(p.image_url, 160)) + '" alt="" loading="lazy" referrerpolicy="no-referrer"><div class="at"><b>' + esc(p.title || p.description.slice(0, 40) || 'Untitled') + '</b><small>' + esc(when(p.created_at)) + (p.published ? '' : ' · hidden') + '</small>' +
+            return '<div class="arow"><img src="' + esc(img(p.image_url, 160)) + '" alt="" loading="lazy" referrerpolicy="no-referrer"><div class="at"><b>' + esc(p.title || p.description.slice(0, 40) || 'Untitled') + '</b><small data-sid="' + esc(p.id) + '">' + esc(when(p.created_at)) + (p.published ? '' : ' · hidden') + '</small>' +
               '<div class="ab"><button class="btn" type="button" data-a="e" data-id="' + esc(p.id) + '">Edit</button><button class="btn" type="button" data-a="v" data-id="' + esc(p.id) + '">' + (p.published ? 'Hide' : 'Show') + '</button><button class="btn" type="button" data-a="d" data-id="' + esc(p.id) + '">Delete</button></div></div></div>';
           }).join('') : '<p class="empty">Nothing yet. Add your first photograph above.</p>';
+          api('/rest/v1/mg_stats?select=item_key,views,likes&item_key=like.post:*').then(function (st) {
+            (st || []).forEach(function (s) { var sm = document.querySelector('[data-sid="' + s.item_key.slice(5) + '"]'); if (sm) sm.textContent += ' · ' + fmt(s.views) + ' views · ' + fmt(s.likes) + ' likes'; });
+          }, function () {});
         }, function (x) { $('#ls').innerHTML = '<p class="empty">' + esc(x.message) + '</p>'; if (x.status === 401) login('Please sign in again.'); });
       };
       $('#ls').onclick = function (e) {
